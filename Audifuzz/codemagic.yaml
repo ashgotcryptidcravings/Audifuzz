@@ -1,0 +1,29 @@
+# Starter config. Check Codemagic's current docs for signing setup
+# (you'll need an Apple Developer account for on-device builds).
+workflows:
+  audifuzz-ios:
+    name: Audifuzz iOS
+    instance_type: mac_mini_m1
+    max_build_duration: 30
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "Audifuzz.xcodeproj"
+        XCODE_SCHEME: "Audifuzz"
+        BUNDLE_ID: "com.Foundation.audifuzz"   # change me
+      ios_signing:
+        distribution_type: development       # or ad_hoc / app_store
+        bundle_identifier: com.yourname.audifuzz
+    scripts:
+      - name: Set up signing
+        script: keychain initialize
+      - name: Fetch signing files
+        script: app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_DEVELOPMENT --create
+      - name: Apply signing
+        script: |
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Build ipa
+        script: xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
