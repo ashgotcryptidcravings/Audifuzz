@@ -7,39 +7,37 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		729543D130600A4200B33115 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729543D030600A4200B33115 /* Persistence.swift */; };
 		729543D430600A4200B33115 /* Audifuzz.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 729543D230600A4200B33115 /* Audifuzz.xcdatamodeld */; };
 		729543D830600A4400B33115 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 729543D730600A4400B33115 /* Assets.xcassets */; };
 		729543DC30600A4400B33115 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 729543DB30600A4400B33115 /* Preview Assets.xcassets */; };
 		729543E330600B8C00B33115 /* codemagic.yaml in Resources */ = {isa = PBXBuildFile; fileRef = 729543E230600B8C00B33115 /* codemagic.yaml */; };
 		729543E530600B9400B33115 /* AGENTS.md in Resources */ = {isa = PBXBuildFile; fileRef = 729543E430600B9400B33115 /* AGENTS.md */; };
-		7295444B30601E2800B33115 /* AudifuzzApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295444A30601E2800B33115 /* AudifuzzApp.swift */; };
-		7295444E30601E2D00B33115 /* EffectModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295444C30601E2D00B33115 /* EffectModule.swift */; };
-		7295444F30601E2D00B33115 /* AudioEngineManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295444D30601E2D00B33115 /* AudioEngineManager.swift */; };
-		7295445830601E3B00B33115 /* FilterEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445030601E3B00B33115 /* FilterEffect.swift */; };
-		7295445930601E3B00B33115 /* ReverbEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445130601E3B00B33115 /* ReverbEffect.swift */; };
-		7295445A30601E3B00B33115 /* OverdriveEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445230601E3B00B33115 /* OverdriveEffect.swift */; };
-		7295445B30601E3C00B33115 /* DelayEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445330601E3B00B33115 /* DelayEffect.swift */; };
-		7295445C30601E3C00B33115 /* BitCrushEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445430601E3B00B33115 /* BitCrushEffect.swift */; };
-		7295445D30601E3C00B33115 /* PitchEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445530601E3B00B33115 /* PitchEffect.swift */; };
-		7295445E30601E3C00B33115 /* SampleStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445630601E3B00B33115 /* SampleStorage.swift */; };
-		7295445F30601E3C00B33115 /* SpatialStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445730601E3B00B33115 /* SpatialStage.swift */; };
-		7295446330601E4100B33115 /* SoundLabEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446030601E4100B33115 /* SoundLabEngine.swift */; };
-		7295446430601E4100B33115 /* SynthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446130601E4100B33115 /* SynthModels.swift */; };
-		7295446530601E4100B33115 /* SynthRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446230601E4100B33115 /* SynthRenderer.swift */; };
-		7295446730601E4600B33115 /* Preset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446630601E4600B33115 /* Preset.swift */; };
-		7295446E30601E5300B33115 /* Dial.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446830601E5300B33115 /* Dial.swift */; };
-		7295446F30601E5300B33115 /* SoundLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446930601E5300B33115 /* SoundLabView.swift */; };
-		7295447030601E5300B33115 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446A30601E5300B33115 /* EditorView.swift */; };
-		7295447130601E5300B33115 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446B30601E5300B33115 /* ContentView.swift */; };
-		7295447230601E5300B33115 /* EffectCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446C30601E5300B33115 /* EffectCardView.swift */; };
-		7295447330601E5300B33115 /* SpatialCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446D30601E5300B33115 /* SpatialCardView.swift */; };
-		7295447530601E5F00B33115 /* Preset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295447430601E5F00B33115 /* Preset.swift */; };
+		7295449C3064DEC300B33115 /* Dial.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446830601E5300B33115 /* Dial.swift */; };
+		7295449D3064DEC300B33115 /* AudifuzzApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295444A30601E2800B33115 /* AudifuzzApp.swift */; };
+		7295449E3064DEC300B33115 /* Preset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295446630601E4600B33115 /* Preset.swift */; };
+		7295449F3064DEC300B33115 /* SoundLabEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295448E3064DE2A00B33115 /* SoundLabEngine.swift */; };
+		729544A03064DEC300B33115 /* SynthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544913064DE5500B33115 /* SynthModels.swift */; };
+		729544A13064DEC300B33115 /* SpatialCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544803064DDA200B33115 /* SpatialCardView.swift */; };
+		729544A23064DEC300B33115 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295447F3064DDA200B33115 /* ContentView.swift */; };
+		729544A43064DEC300B33115 /* SynthRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544903064DE5500B33115 /* SynthRenderer.swift */; };
+		729544A53064DEC300B33115 /* AudioEngineManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295448D3064DE2A00B33115 /* AudioEngineManager.swift */; };
+		729544A63064DEC300B33115 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544813064DDA200B33115 /* EditorView.swift */; };
+		729544A73064DEC300B33115 /* EffectCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544823064DDA300B33115 /* EffectCardView.swift */; };
+		729544A83064DEC300B33115 /* SoundLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295447E3064DDA200B33115 /* SoundLabView.swift */; };
+		729544A93064DEC300B33115 /* SampleStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295445630601E3B00B33115 /* SampleStorage.swift */; };
+		729544AA3064DEF200B33115 /* EffectModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295448A3064DDD000B33115 /* EffectModule.swift */; };
+		729544AB3064DEF200B33115 /* PitchEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544853064DDD000B33115 /* PitchEffect.swift */; };
+		729544AC3064DEF200B33115 /* DelayEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544873064DDD000B33115 /* DelayEffect.swift */; };
+		729544AD3064DEF200B33115 /* ReverbEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544863064DDD000B33115 /* ReverbEffect.swift */; };
+		729544AE3064DEF200B33115 /* BitCrushEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544893064DDD000B33115 /* BitCrushEffect.swift */; };
+		729544AF3064DEF200B33115 /* SpatialStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7295448B3064DE0700B33115 /* SpatialStage.swift */; };
+		729544B03064DEF200B33115 /* FilterEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544843064DDD000B33115 /* FilterEffect.swift */; };
+		729544B13064DEF200B33115 /* OverdriveEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544883064DDD000B33115 /* OverdriveEffect.swift */; };
+		729544B53064DF5F00B33115 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544B43064DF5F00B33115 /* Persistence.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		729543CB30600A4200B33115 /* Audifuzz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Audifuzz.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		729543D030600A4200B33115 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		729543D330600A4200B33115 /* Audifuzz.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Audifuzz.xcdatamodel; sourceTree = "<group>"; };
 		729543D730600A4400B33115 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		729543D930600A4400B33115 /* Audifuzz.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Audifuzz.entitlements; sourceTree = "<group>"; };
@@ -47,27 +45,27 @@
 		729543E230600B8C00B33115 /* codemagic.yaml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.yaml; path = codemagic.yaml; sourceTree = "<group>"; };
 		729543E430600B9400B33115 /* AGENTS.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
 		7295444A30601E2800B33115 /* AudifuzzApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = AudifuzzApp.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/AudifuzzApp.swift"; sourceTree = "<group>"; };
-		7295444C30601E2D00B33115 /* EffectModule.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = EffectModule.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/EffectModule.swift"; sourceTree = "<group>"; };
-		7295444D30601E2D00B33115 /* AudioEngineManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = AudioEngineManager.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/AudioEngineManager.swift"; sourceTree = "<group>"; };
-		7295445030601E3B00B33115 /* FilterEffect.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = FilterEffect.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/Effects/FilterEffect.swift"; sourceTree = "<group>"; };
-		7295445130601E3B00B33115 /* ReverbEffect.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ReverbEffect.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/Effects/ReverbEffect.swift"; sourceTree = "<group>"; };
-		7295445230601E3B00B33115 /* OverdriveEffect.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = OverdriveEffect.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/Effects/OverdriveEffect.swift"; sourceTree = "<group>"; };
-		7295445330601E3B00B33115 /* DelayEffect.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = DelayEffect.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/Effects/DelayEffect.swift"; sourceTree = "<group>"; };
-		7295445430601E3B00B33115 /* BitCrushEffect.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = BitCrushEffect.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/Effects/BitCrushEffect.swift"; sourceTree = "<group>"; };
-		7295445530601E3B00B33115 /* PitchEffect.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = PitchEffect.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/Effects/PitchEffect.swift"; sourceTree = "<group>"; };
 		7295445630601E3B00B33115 /* SampleStorage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SampleStorage.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/SampleStorage.swift"; sourceTree = "<group>"; };
-		7295445730601E3B00B33115 /* SpatialStage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SpatialStage.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/SpatialStage.swift"; sourceTree = "<group>"; };
-		7295446030601E4100B33115 /* SoundLabEngine.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SoundLabEngine.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Lab/SoundLabEngine.swift"; sourceTree = "<group>"; };
-		7295446130601E4100B33115 /* SynthModels.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SynthModels.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Lab/SynthModels.swift"; sourceTree = "<group>"; };
-		7295446230601E4100B33115 /* SynthRenderer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SynthRenderer.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Lab/SynthRenderer.swift"; sourceTree = "<group>"; };
 		7295446630601E4600B33115 /* Preset.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Preset.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Presets/Preset.swift"; sourceTree = "<group>"; };
 		7295446830601E5300B33115 /* Dial.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Dial.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/Dial.swift"; sourceTree = "<group>"; };
-		7295446930601E5300B33115 /* SoundLabView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SoundLabView.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/SoundLabView.swift"; sourceTree = "<group>"; };
-		7295446A30601E5300B33115 /* EditorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = EditorView.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/EditorView.swift"; sourceTree = "<group>"; };
-		7295446B30601E5300B33115 /* ContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ContentView.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/ContentView.swift"; sourceTree = "<group>"; };
-		7295446C30601E5300B33115 /* EffectCardView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = EffectCardView.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/EffectCardView.swift"; sourceTree = "<group>"; };
-		7295446D30601E5300B33115 /* SpatialCardView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SpatialCardView.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/SpatialCardView.swift"; sourceTree = "<group>"; };
-		7295447430601E5F00B33115 /* Preset.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Preset.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Presets/Preset.swift"; sourceTree = "<group>"; };
+		7295447E3064DDA200B33115 /* SoundLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundLabView.swift; sourceTree = "<group>"; };
+		7295447F3064DDA200B33115 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		729544803064DDA200B33115 /* SpatialCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialCardView.swift; sourceTree = "<group>"; };
+		729544813064DDA200B33115 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
+		729544823064DDA300B33115 /* EffectCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectCardView.swift; sourceTree = "<group>"; };
+		729544843064DDD000B33115 /* FilterEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterEffect.swift; sourceTree = "<group>"; };
+		729544853064DDD000B33115 /* PitchEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PitchEffect.swift; sourceTree = "<group>"; };
+		729544863064DDD000B33115 /* ReverbEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReverbEffect.swift; sourceTree = "<group>"; };
+		729544873064DDD000B33115 /* DelayEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DelayEffect.swift; sourceTree = "<group>"; };
+		729544883064DDD000B33115 /* OverdriveEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverdriveEffect.swift; sourceTree = "<group>"; };
+		729544893064DDD000B33115 /* BitCrushEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BitCrushEffect.swift; sourceTree = "<group>"; };
+		7295448A3064DDD000B33115 /* EffectModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectModule.swift; sourceTree = "<group>"; };
+		7295448B3064DE0700B33115 /* SpatialStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialStage.swift; sourceTree = "<group>"; };
+		7295448D3064DE2A00B33115 /* AudioEngineManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngineManager.swift; sourceTree = "<group>"; };
+		7295448E3064DE2A00B33115 /* SoundLabEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundLabEngine.swift; sourceTree = "<group>"; };
+		729544903064DE5500B33115 /* SynthRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthRenderer.swift; sourceTree = "<group>"; };
+		729544913064DE5500B33115 /* SynthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthModels.swift; sourceTree = "<group>"; };
+		729544B43064DF5F00B33115 /* Persistence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,29 +98,15 @@
 		729543CD30600A4200B33115 /* Audifuzz */ = {
 			isa = PBXGroup;
 			children = (
-				7295444D30601E2D00B33115 /* AudioEngineManager.swift */,
-				7295444C30601E2D00B33115 /* EffectModule.swift */,
+				7295448F3064DE5500B33115 /* Instruments */,
+				7295448C3064DE2A00B33115 /* Engines */,
+				7295447D3064DDA200B33115 /* Views */,
+				729544833064DDCF00B33115 /* Effects */,
 				7295444A30601E2800B33115 /* AudifuzzApp.swift */,
-				7295445430601E3B00B33115 /* BitCrushEffect.swift */,
-				7295445330601E3B00B33115 /* DelayEffect.swift */,
-				7295445030601E3B00B33115 /* FilterEffect.swift */,
-				7295445230601E3B00B33115 /* OverdriveEffect.swift */,
-				7295445530601E3B00B33115 /* PitchEffect.swift */,
-				7295445130601E3B00B33115 /* ReverbEffect.swift */,
 				7295445630601E3B00B33115 /* SampleStorage.swift */,
-				7295445730601E3B00B33115 /* SpatialStage.swift */,
-				7295446030601E4100B33115 /* SoundLabEngine.swift */,
-				7295446130601E4100B33115 /* SynthModels.swift */,
-				7295446230601E4100B33115 /* SynthRenderer.swift */,
 				7295446630601E4600B33115 /* Preset.swift */,
-				729543D030600A4200B33115 /* Persistence.swift */,
-				7295446B30601E5300B33115 /* ContentView.swift */,
+				729544B43064DF5F00B33115 /* Persistence.swift */,
 				7295446830601E5300B33115 /* Dial.swift */,
-				7295447430601E5F00B33115 /* Preset.swift */,
-				7295446A30601E5300B33115 /* EditorView.swift */,
-				7295446C30601E5300B33115 /* EffectCardView.swift */,
-				7295446930601E5300B33115 /* SoundLabView.swift */,
-				7295446D30601E5300B33115 /* SpatialCardView.swift */,
 				729543E430600B9400B33115 /* AGENTS.md */,
 				729543E230600B8C00B33115 /* codemagic.yaml */,
 				729543D730600A4400B33115 /* Assets.xcassets */,
@@ -139,6 +123,51 @@
 				729543DB30600A4400B33115 /* Preview Assets.xcassets */,
 			);
 			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		7295447D3064DDA200B33115 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				7295447F3064DDA200B33115 /* ContentView.swift */,
+				729544813064DDA200B33115 /* EditorView.swift */,
+				729544823064DDA300B33115 /* EffectCardView.swift */,
+				7295447E3064DDA200B33115 /* SoundLabView.swift */,
+				729544803064DDA200B33115 /* SpatialCardView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		729544833064DDCF00B33115 /* Effects */ = {
+			isa = PBXGroup;
+			children = (
+				7295448A3064DDD000B33115 /* EffectModule.swift */,
+				729544893064DDD000B33115 /* BitCrushEffect.swift */,
+				729544873064DDD000B33115 /* DelayEffect.swift */,
+				729544843064DDD000B33115 /* FilterEffect.swift */,
+				729544883064DDD000B33115 /* OverdriveEffect.swift */,
+				7295448B3064DE0700B33115 /* SpatialStage.swift */,
+				729544853064DDD000B33115 /* PitchEffect.swift */,
+				729544863064DDD000B33115 /* ReverbEffect.swift */,
+			);
+			path = Effects;
+			sourceTree = "<group>";
+		};
+		7295448C3064DE2A00B33115 /* Engines */ = {
+			isa = PBXGroup;
+			children = (
+				7295448D3064DE2A00B33115 /* AudioEngineManager.swift */,
+				7295448E3064DE2A00B33115 /* SoundLabEngine.swift */,
+			);
+			path = Engines;
+			sourceTree = "<group>";
+		};
+		7295448F3064DE5500B33115 /* Instruments */ = {
+			isa = PBXGroup;
+			children = (
+				729544913064DE5500B33115 /* SynthModels.swift */,
+				729544903064DE5500B33115 /* SynthRenderer.swift */,
+			);
+			path = Instruments;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -213,30 +242,29 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7295446F30601E5300B33115 /* SoundLabView.swift in Sources */,
-				7295445930601E3B00B33115 /* ReverbEffect.swift in Sources */,
-				7295447130601E5300B33115 /* ContentView.swift in Sources */,
-				7295445830601E3B00B33115 /* FilterEffect.swift in Sources */,
-				7295445C30601E3C00B33115 /* BitCrushEffect.swift in Sources */,
-				7295446730601E4600B33115 /* Preset.swift in Sources */,
-				7295445F30601E3C00B33115 /* SpatialStage.swift in Sources */,
-				7295444E30601E2D00B33115 /* EffectModule.swift in Sources */,
-				7295445A30601E3B00B33115 /* OverdriveEffect.swift in Sources */,
-				7295447230601E5300B33115 /* EffectCardView.swift in Sources */,
-				7295447530601E5F00B33115 /* Preset.swift in Sources */,
-				7295445E30601E3C00B33115 /* SampleStorage.swift in Sources */,
-				7295447030601E5300B33115 /* EditorView.swift in Sources */,
-				7295444B30601E2800B33115 /* AudifuzzApp.swift in Sources */,
-				7295446430601E4100B33115 /* SynthModels.swift in Sources */,
-				7295445D30601E3C00B33115 /* PitchEffect.swift in Sources */,
-				7295446330601E4100B33115 /* SoundLabEngine.swift in Sources */,
-				7295446530601E4100B33115 /* SynthRenderer.swift in Sources */,
-				7295446E30601E5300B33115 /* Dial.swift in Sources */,
-				7295445B30601E3C00B33115 /* DelayEffect.swift in Sources */,
-				729543D130600A4200B33115 /* Persistence.swift in Sources */,
-				7295444F30601E2D00B33115 /* AudioEngineManager.swift in Sources */,
+				729544AA3064DEF200B33115 /* EffectModule.swift in Sources */,
+				729544B13064DEF200B33115 /* OverdriveEffect.swift in Sources */,
+				729544A73064DEC300B33115 /* EffectCardView.swift in Sources */,
+				729544A93064DEC300B33115 /* SampleStorage.swift in Sources */,
+				7295449D3064DEC300B33115 /* AudifuzzApp.swift in Sources */,
+				7295449F3064DEC300B33115 /* SoundLabEngine.swift in Sources */,
+				729544A23064DEC300B33115 /* ContentView.swift in Sources */,
+				729544A53064DEC300B33115 /* AudioEngineManager.swift in Sources */,
+				729544B53064DF5F00B33115 /* Persistence.swift in Sources */,
+				729544AF3064DEF200B33115 /* SpatialStage.swift in Sources */,
+				729544A83064DEC300B33115 /* SoundLabView.swift in Sources */,
+				729544B03064DEF200B33115 /* FilterEffect.swift in Sources */,
+				729544A03064DEC300B33115 /* SynthModels.swift in Sources */,
 				729543D430600A4200B33115 /* Audifuzz.xcdatamodeld in Sources */,
-				7295447330601E5300B33115 /* SpatialCardView.swift in Sources */,
+				7295449E3064DEC300B33115 /* Preset.swift in Sources */,
+				729544AE3064DEF200B33115 /* BitCrushEffect.swift in Sources */,
+				729544AD3064DEF200B33115 /* ReverbEffect.swift in Sources */,
+				729544AB3064DEF200B33115 /* PitchEffect.swift in Sources */,
+				729544A43064DEC300B33115 /* SynthRenderer.swift in Sources */,
+				729544AC3064DEF200B33115 /* DelayEffect.swift in Sources */,
+				729544A63064DEC300B33115 /* EditorView.swift in Sources */,
+				729544A13064DEC300B33115 /* SpatialCardView.swift in Sources */,
+				7295449C3064DEC300B33115 /* Dial.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

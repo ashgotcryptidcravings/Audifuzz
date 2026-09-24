@@ -1,45 +1,22 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @EnvironmentObject var manager: AudioEngineManager
-    @State private var showImporter = false
+    @StateObject private var manager = AudioEngineManager()
+    @StateObject private var lab = SoundLabEngine()
+    @State private var tab = 0
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text("Audifuzz")
-                .font(.largeTitle.bold())
+        TabView(selection: $tab) {
+            EditorView(manager: manager)
+                .tabItem { Label("Editor", systemImage: "slider.horizontal.3") }
+                .tag(0)
 
-            Text(manager.fileName ?? "No file loaded")
-                .font(.footnote)
-                .foregroundColor(.secondary)
-
-            HStack {
-                Button("Open") { showImporter = true }
-                Button(manager.isPlaying ? "Stop" : "Play") {
-                    manager.isPlaying ? manager.stop() : manager.play()
-                }
-                .disabled(manager.fileName == nil)
-                Button("Randomize") { manager.randomize() }
-                Button("Reset") { manager.resetAll() }
+            SoundLabView(lab: lab) { url in
+                manager.load(url: url)
+                tab = 0
             }
-            .buttonStyle(.bordered)
-
-            if let message = manager.errorMessage {
-                Text(message).font(.footnote).foregroundColor(.red)
-            }
-
-            List {
-                ForEach(manager.effects) { fx in
-                    EffectRowView(effect: fx) { offset in
-                        manager.move(fx, by: offset)
-                    }
-                }
-            }
-        }
-        .padding()
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio]) { result in
-            if case .success(let url) = result { manager.load(url: url) }
+            .tabItem { Label("Sound Lab", systemImage: "waveform") }
+            .tag(1)
         }
     }
 }
