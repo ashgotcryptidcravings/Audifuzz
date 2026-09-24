@@ -1,59 +1,71 @@
-# Audifuzz: Instructions for AI Coding Assistants
+## How navigation works
+`ContentView` is a `NavigationView` with a sidebar `List`. Each page is one `NavigationLink` with a unique integer `tag` bound to `selection`. `ContentView` owns every engine as a `@StateObject` and passes it into the page. Pages never create their own engines.
 
-Read this before suggesting or editing code. It applies to GitHub Copilot, VS Code AI extensions, and any other AI model working in this repo.
-
-## What this project is
-Audifuzz is a lightweight audio distorter app for **macOS (MacBook)** and **iOS (iPhone)**, written in **SwiftUI** with **AVAudioEngine**. Users load an audio file, run it through a reorderable chain of effects, and tweak sliders. It should stay light and be easy to extend with new effects.
-
-## Hard constraints (do not break these)
-- **Xcode 14.2 / Swift 5.7 / macOS Monterey (12).** Do not use syntax or APIs that need newer toolchains (no macros, no `@Observable`, no `NavigationStack`, no Swift Charts, no SwiftData, no `if`/`switch` expressions, no `#Preview`).
-- **Deployment targets: iOS 16.0, macOS 12.0.** Check availability before using any API.
-- **No third-party dependencies** (no Swift packages, no CocoaPods) unless the owner asks.
-- **One codebase for both platforms.** Wrap platform-specific code in `#if os(iOS)` / `#if os(macOS)`.
-- Builds for iPhone happen on **Codemagic** (config in `codemagic.yaml`). Keep the project buildable from the command line with `xcodebuild`.
-- Keep it **light**: no heavy animations, no per-frame UI redraws, no large assets.
-
-## Project layout
-```
-Audifuzz/
-  AudifuzzApp.swift            App entry, creates AudioEngineManager
-  Audio/
-    AudioEngineManager.swift   Engine, player, effect chain order, presets, randomize
-    EffectModule.swift         Base class + EffectParameter
-    Effects/                   One file per effect
-  Presets/Preset.swift         Codable presets saved as JSON
-  Views/
-    ContentView.swift          Main screen
-    EffectRowView.swift        One effect row (toggle, reorder, sliders)
-```
+### To add a new page
+1. **Create the screen:** `Views/YourPageView.swift`, a SwiftUI `View`. Wrap sections in `.card()` and use `Dial` for adjustable values.
+2. **If it needs audio or logic,** create its own engine class in a new folder (for example `Audifuzz/YourFeature/YourEngine.swift`), an `ObservableObject` like `SoundLabEngine`. Give each page its own `AVAudioEngine`. Do not add nodes to the Editor's engine.
+3. **Wire it into `ContentView.swift`:**
+   - Add `@StateObject private var yourEngine = YourEngine()` if the page has one.
+   - Add a `NavigationLink` inside the sidebar `List` with the **next unused tag** (2, 3, ...):
+     ```swift
+     NavigationLink(
+         destination: YourPageView(engine: yourEngine),
+         tag: 2,
+         selection: $selection
+     ) {
+         Label("Your Page", systemImage: "star")
+     }
+     ```
+4. **Talking between pages:** pass a closure into the destination view, like Sound Lab's "Use in Editor" (`manager.load(url:)` then `selection = 0`). Pages should not reference each other directly.
+5. **Stop work when leaving:** add `.onDisappear { yourEngine.stop() }` so an idle page doesn't keep audio running.
+6. **Permissions:** if the page needs a new permission (camera, files, etc.), add its Info key to both targets and list it under Permissions below.
+7. **Docs:** add the new files to the layout above and to `FILE_TREE.md`.
 
 ## How effects work
 Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - Give it a stable `key` (used by presets, never rename existing keys) and a display `name`.
-- Declare its knobs as `EffectParameter(id:name:range:value:)`. The UI builds sliders automatically.
+- Declare its knobs as `EffectParameter(id:name:range:value:unit:display:)`. The UI builds a dial for each automatically.
 - Override `apply()` to copy `isEnabled` and parameter values onto the wrapped unit (`bypass = !isEnabled`).
 - Call `apply()` at the end of the subclass `init`.
 
 ### To add a new effect
 1. Create `Audio/Effects/YourEffect.swift`, subclassing `EffectModule` (copy `DelayEffect.swift` as a template).
 2. Add `YourEffect()` to the `effects` array in `AudioEngineManager.init()`.
-3. Nothing else. UI and presets pick it up automatically.
+3. Nothing else. The card, dials, reordering, randomize, reset, and presets pick it up automatically.
 
 ## Audio rules
-- Never allocate memory, take locks, or call Swift/ObjC runtime-heavy code inside a real-time audio render callback.
-- Prefer Apple's built-in `AVAudioUnit*` effects. Only write custom DSP (`AVAudioSinkNode`, `AVAudioSourceNode`, or an `AUAudioUnit` render block) when a built-in can't do the job.
-- Reordering effects rebuilds the chain in `AudioEngineManager.rebuildChain`. Keep all node connections in that one place.
-- On iOS, set up `AVAudioSession` before starting the engine (already done in `play()`).
+- **Never allocate memory, take locks, or call Swift/ObjC-heavy code inside a real-time render block.** `SynthRenderer` reads plain settings from a fixed-size pointer for this reason. Keep it that way.
+- Prefer Apple's built-in `AVAudioUnit*` effects. Write custom DSP only when a built-in can't do the job.
+- **All effect connections live in `AudioEngineManager.rebuildChain()`.** Don't connect nodes anywhere else.
+- **The microphone runs in its own `AVAudioEngine` (`micEngine`) and is fed to the output engine through `micPlayer`.** Never touch `inputNode` on the output engine: on macOS, mixing live input and output in one engine crashes with `isInputConnToConverter`.
+- The Editor's output engine stays running after a file loads and the file is pre-scheduled (`armFile()`), so Play is instant. Keep it that way. File opening happens off the main thread and sets `isLoading`, which the UI shows as "Loading file…".
+- The spatializer needs a mono input, so `SpatialStage.mixer` downmixes before `AVAudioEnvironmentNode`.
+- On iOS, set up `AVAudioSession` before starting an engine (`configureSession()`). The mic needs `.playAndRecord`.
+- Saving a Lab sound uses offline manual rendering so the file matches what you hear.
+
+## UI & Performance rules
+- Use `Dial` for most adjustable values, not `Slider` (with the exception of `EQFader` for graphic EQ layouts). 
+- Sections use the `.card()` modifier.
+- **Rendering Performance:** Always append `.drawingGroup()` to custom vector graphics (like `Dial` tracks or fader grooves) to offload rendering to the Metal GPU layer. 
+- **View Updates:** Never mutate state inside `.onChange` or during a render pass to prevent SwiftUI infinite redraw loops that tank framerates. 
+- **Lists:** Avoid macOS/iOS `List` for rapidly updating dynamic content; use `VStack` or `LazyVStack` to avoid bridging overhead.
+- Avoid `ForEach($array)` bindings on arrays that can shrink; use id-based bindings like `SoundLabEngine.binding(for:)`.
+- Views stay simple. Logic lives in engines, managers, and effect classes.
+
+## Permissions (set in Xcode, not in code)
+- Both targets: `NSMicrophoneUsageDescription` (Privacy - Microphone Usage Description).
+- macOS: App Sandbox > Audio Input, and User Selected File (Read Only).
+- iOS: `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` so saved samples show in the Files app.
 
 ## Code style
-- Small files, one type per file, clear names.
-- SwiftUI views stay simple. Business logic lives in `AudioEngineManager` or effect classes, not in views.
+- Small files, one main type per file, clear names.
 - Comment the "why", not the "what".
 - Don't rename or reorganize files without being asked.
+- When you add, remove, or rename a file, update the layout in this file and `FILE_TREE.md`.
 
 ## Roadmap (ideas, not requirements)
-- Live microphone input (needs mic permission strings and macOS audio-input entitlement)
-- Preset picker UI using `PresetStore`
+- Preset picker page using `PresetStore`
 - Custom bitcrusher, ring mod, and wavefolder via render blocks
-- Export processed audio to a file (offline rendering)
+- Save the processed Editor output to a file (offline rendering)
 - Level meter using a single cheap tap on the main mixer
+- Note keyboard for the Sound Lab

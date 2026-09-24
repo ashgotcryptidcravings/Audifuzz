@@ -1,4 +1,5 @@
 import AVFoundation
+import SwiftUI
 
 /// Editor audio. Two engines on purpose:
 ///
@@ -15,16 +16,48 @@ final class AudioEngineManager: ObservableObject {
         var id: String { rawValue }
     }
 
-    @Published private(set) var effects: [EffectModule]
+    @Published private(set) var effects: [EffectModule] {
+        didSet {
+            print("[AudioEngineManager] Effects array mutated. Total active effects: \(effects.count)")
+        }
+    }
     @Published private(set) var isPlaying = false
     @Published private(set) var isLoading = false
     @Published private(set) var fileName: String?
     @Published private(set) var isMicLive = false
     @Published private(set) var isRecording = false
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet {
+            if let msg = errorMessage {
+                print("[ERROR] AudioEngineManager error reported: \(msg)")
+            }
+        }
+    }
     let spatial = SpatialStage()
 
     var source: Source { isMicLive ? .mic : .file }
+
+    // MARK: - Preferences Reading
+    private var userSampleRate: Double {
+        let rate = UserDefaults.standard.double(forKey: "defaultSampleRate")
+        let resolved = rate > 0 ? rate : 44100.0
+        print("[Preferences] Sample rate requested: \(resolved) Hz")
+        return resolved
+    }
+
+    private var userBufferSize: AVAudioFrameCount {
+        let size = UserDefaults.standard.integer(forKey: "bufferSize")
+        let resolved = size > 0 ? AVAudioFrameCount(size) : 512
+        print("[Preferences] Buffer size requested: \(resolved) frames")
+        return resolved
+    }
+
+    private var autoPlayOnLoad: Bool {
+        if UserDefaults.standard.object(forKey: "autoPlayOnLoad") == nil { return true }
+        let enabled = UserDefaults.standard.bool(forKey: "autoPlayOnLoad")
+        print("[Preferences] Auto-play on load: \(enabled)")
+        return enabled
+    }
 
     // Output engine
     private let engine = AVAudioEngine()
@@ -50,6 +83,7 @@ final class AudioEngineManager: ObservableObject {
     private var recordingFile: AVAudioFile?
 
     init() {
+        print("[AudioEngineManager] Initializing audio engine and effect modules...")
         effects = [
             OverdriveEffect(),
             BitCrushEffect(),
@@ -66,6 +100,7 @@ final class AudioEngineManager: ObservableObject {
         effects.forEach { engine.attach($0.unit) }
         spatial.onRouteChange = { [weak self] in
             guard let self = self else { return }
+            print("[SpatialStage] Route configuration changed. Rebuilding chain...")
             if self.isPlaying { self.stop() }
             self.rebuildChain()
         }
@@ -74,21 +109,27 @@ final class AudioEngineManager: ObservableObject {
 
         NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
-        ) { [weak self] _ in self?.restartEngine() }
+        ) { [weak self] _ in
+            print("[AudioEngine] Configuration change detected on main engine. Restarting...")
+            self?.restartEngine()
+        }
 
-        // If the mic device changes (headphones plugged in, etc.), turn the mic off cleanly.
         NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: micEngine, queue: .main
         ) { [weak self] _ in
             guard let self = self, self.isMicLive else { return }
+            print("[AudioEngine] Configuration change detected on mic engine.")
             self.stopMic()
             self.errorMessage = "The microphone changed. Tap Mic to start it again."
         }
+        
+        print("[AudioEngineManager] Initialization complete. Engine ready.")
     }
 
-    // MARK: - File loading (off the main thread, with a loading flag)
+    // MARK: - File loading
 
     func load(url: URL) {
+        print("[FileLoader] Starting file load request for: \(url.lastPathComponent)")
         if isMicLive { stopMic() }
         player.stop()
         playbackID &+= 1
@@ -99,12 +140,16 @@ final class AudioEngineManager: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
                 let f = try AVAudioFile(forReading: url)
-                DispatchQueue.main.async { self?.finishLoading(file: f, url: url, scoped: scoped) }
+                DispatchQueue.main.async {
+                    print("[FileLoader] SUCCESS: File loaded successfully into memory.")
+                    self?.finishLoading(file: f, url: url, scoped: scoped)
+                }
             } catch {
                 DispatchQueue.main.async {
                     if scoped { url.stopAccessingSecurityScopedResource() }
                     self?.isLoading = false
                     self?.errorMessage = "Couldn't open that file."
+                    print("[FileLoader] FAILURE: Could not open file at path \(url.path). Error: \(error.localizedDescription)")
                 }
             }
         }
@@ -115,29 +160,43 @@ final class AudioEngineManager: ObservableObject {
         scopedURL = scoped ? url : nil
         file = f
         fileName = url.lastPathComponent
-        restartEngine()          // connects the player, starts the engine, and queues the file
+        restartEngine()
         isLoading = false
+        print("[FileLoader] File '\(fileName ?? "Unknown")' attached to processing pipeline.")
+
+        if autoPlayOnLoad {
+            print("[FileLoader] Auto-play setting is active. Triggering playback automatically.")
+            play()
+        }
     }
 
-    // MARK: - Playback (engine is already running, so Play is instant)
+    // MARK: - Playback
 
     func play() {
-        guard file != nil, !isLoading else { return }
+        guard file != nil, !isLoading else {
+            print("[Playback] WARNING: Play call ignored. No active file or file is currently loading.")
+            return
+        }
         if !engine.isRunning {
-            guard startEngine() else { return }
+            print("[Playback] Engine is stopped. Attempting engine start before playing...")
+            guard startEngine() else {
+                print("[Playback] FAILURE: Could not start engine. Playback aborted.")
+                return
+            }
             armFile()
         }
         player.play()
         isPlaying = true
+        print("[Playback] SUCCESS: Playback started for '\(fileName ?? "Unknown")'.")
     }
 
     func stop() {
         player.stop()
         isPlaying = false
         armFile()
+        print("[Playback] SUCCESS: Playback stopped and player armed for reset.")
     }
 
-    /// Queue the file from the start so the next Play begins immediately.
     private func armFile() {
         guard let file = file, engine.isRunning else { return }
         file.framePosition = 0
@@ -148,10 +207,11 @@ final class AudioEngineManager: ObservableObject {
                 guard let self = self, self.playbackID == id else { return }
                 self.player.stop()
                 self.isPlaying = false
+                print("[Playback] Reached end of stream. Loop reset complete.")
                 self.armFile()
             }
         }
-        player.prepare(withFrameCount: 8192)
+        player.prepare(withFrameCount: userBufferSize)
     }
 
     // MARK: - Output engine plumbing
@@ -159,18 +219,27 @@ final class AudioEngineManager: ObservableObject {
     private func configureSession() {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        if isMicLive {
-            try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
-        } else {
-            try? session.setCategory(.playback)
+        do {
+            if isMicLive {
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+                print("[AudioSession] Configured category: playAndRecord.")
+            } else {
+                try session.setCategory(.playback)
+                print("[AudioSession] Configured category: playback.")
+            }
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            print("[AudioSession] SUCCESS: Audio session activated.")
+        } catch {
+            print("[AudioSession] FAILURE: Could not configure audio session: \(error.localizedDescription)")
         }
-        try? session.setActive(true)
         #endif
     }
 
     private func refreshGraphFormat() {
-        let rate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        graphFormat = AVAudioFormat(standardFormatWithSampleRate: rate > 0 ? rate : 44100, channels: 2)!
+        let hardwareRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+        let selectedRate = hardwareRate > 0 ? hardwareRate : userSampleRate
+        graphFormat = AVAudioFormat(standardFormatWithSampleRate: selectedRate, channels: 2)!
+        print("[GraphFormat] Updated processing format: \(selectedRate) Hz, 2 Channels.")
     }
 
     @discardableResult
@@ -180,15 +249,17 @@ final class AudioEngineManager: ObservableObject {
         do {
             engine.prepare()
             try engine.start()
+            print("[AudioEngine] SUCCESS: Main AVAudioEngine started.")
             return true
         } catch {
             errorMessage = "Audio engine failed to start."
+            print("[AudioEngine] FAILURE: Main AVAudioEngine failed to start: \(error.localizedDescription)")
             return false
         }
     }
 
-    /// Stop everything, rebuild all connections, and start again.
     private func restartEngine() {
+        print("[AudioEngine] Restarting main engine graph...")
         if isRecording { finishRecording(load: false) }
         playbackID &+= 1
         isPlaying = false
@@ -217,11 +288,13 @@ final class AudioEngineManager: ObservableObject {
                 }
             }
         }
+        print("[AudioEngine] SUCCESS: Engine graph restart cycle completed.")
     }
 
     private func connectPlayer() {
         guard let file = file else { return }
         engine.connect(player, to: sourceMixer, fromBus: 0, toBus: 0, format: file.processingFormat)
+        print("[AudioEngine] Connected file player node to source mixer.")
     }
 
     private func connectMic() {
@@ -230,9 +303,9 @@ final class AudioEngineManager: ObservableObject {
         guard isMicLive, let format = micFormat else { return }
         engine.connect(micPlayer, to: sourceMixer, fromBus: 0, toBus: 1, format: format)
         micConnected = true
+        print("[AudioEngine] Connected microphone player node to source mixer.")
     }
 
-    /// All effect connections live here.
     private func rebuildChain() {
         let gf = graphFormat
         let mono = AVAudioFormat(standardFormatWithSampleRate: gf.sampleRate, channels: 1)!
@@ -250,15 +323,19 @@ final class AudioEngineManager: ObservableObject {
             engine.connect(previous, to: spatial.mixer, format: gf)
             engine.connect(spatial.mixer, to: spatial.environment, format: mono)
             engine.connect(spatial.environment, to: engine.mainMixerNode, format: gf)
+            print("[EffectsChain] Built active chain with Spatial Stage enabled.")
         } else {
             engine.connect(previous, to: engine.mainMixerNode, format: gf)
+            print("[EffectsChain] Built active chain without Spatial Stage.")
         }
         spatial.apply()
+        print("[EffectsChain] SUCCESS: All effect nodes linked successfully.")
     }
 
-    // MARK: - Microphone (its own engine)
+    // MARK: - Microphone
 
     func setSource(_ newSource: Source) {
+        print("[SourceSelector] Source changed to: \(newSource.rawValue)")
         switch newSource {
         case .mic: startMic()
         case .file: stopMic()
@@ -267,21 +344,39 @@ final class AudioEngineManager: ObservableObject {
 
     func startMic() {
         guard !isMicLive else { return }
+        print("[Microphone] Requesting hardware permission...")
+        #if os(iOS)
+        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if granted {
+                    print("[Microphone] SUCCESS: Permission granted on iOS.")
+                    self.beginMic()
+                } else {
+                    self.errorMessage = "Microphone access is off. Turn it on in Settings."
+                    print("[Microphone] FAILURE: Permission denied on iOS.")
+                }
+            }
+        }
+        #else
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                guard granted else {
+                if granted {
+                    print("[Microphone] SUCCESS: Permission granted on macOS.")
+                    self.beginMic()
+                } else {
                     self.errorMessage = "Microphone access is off. Turn it on in Settings."
-                    return
+                    print("[Microphone] FAILURE: Permission denied on macOS.")
                 }
-                self.beginMic()
             }
         }
+        #endif
     }
 
     private func beginMic() {
         errorMessage = nil
-        isMicLive = true          // set first: iOS needs the record-capable audio session
+        isMicLive = true
         configureSession()
 
         let input = micEngine.inputNode
@@ -289,20 +384,23 @@ final class AudioEngineManager: ObservableObject {
         guard format.sampleRate > 0, format.channelCount > 0 else {
             errorMessage = "No microphone input is available."
             isMicLive = false
+            print("[Microphone] FAILURE: Invalid audio format or input hardware offline.")
             return
         }
         micFormat = format
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+        input.installTap(onBus: 0, bufferSize: userBufferSize, format: format) { [weak self] buffer, _ in
             self?.handleMic(buffer)
         }
         do {
             micEngine.prepare()
             try micEngine.start()
+            print("[Microphone] SUCCESS: Mic tap installed and mic engine started.")
         } catch {
             input.removeTap(onBus: 0)
             errorMessage = "Couldn't start the microphone."
             isMicLive = false
+            print("[Microphone] FAILURE: Could not start mic engine: \(error.localizedDescription)")
             return
         }
         restartEngine()
@@ -314,10 +412,10 @@ final class AudioEngineManager: ObservableObject {
         isMicLive = false
         micEngine.inputNode.removeTap(onBus: 0)
         micEngine.stop()
+        print("[Microphone] SUCCESS: Microphone stopped and tap uninstalled.")
         restartEngine()
     }
 
-    /// Runs on the mic's own thread: saves to the recording (if any) and queues a copy for playback.
     private func handleMic(_ buffer: AVAudioPCMBuffer) {
         micLock.lock()
         let out = recordingFile
@@ -354,7 +452,7 @@ final class AudioEngineManager: ObservableObject {
         return out
     }
 
-    // MARK: - Recording a mic sample
+    // MARK: - Recording
 
     func toggleRecording() {
         if isRecording { finishRecording(load: true) } else { startRecording() }
@@ -363,6 +461,7 @@ final class AudioEngineManager: ObservableObject {
     private func startRecording() {
         guard isMicLive, let format = micFormat else {
             errorMessage = "Start the mic first."
+            print("[Recorder] WARNING: Recording attempt aborted. Microphone is not active.")
             return
         }
         let url = SampleStorage.newURL(prefix: "Mic", ext: "caf")
@@ -373,8 +472,10 @@ final class AudioEngineManager: ObservableObject {
             micLock.unlock()
             recordingURL = url
             isRecording = true
+            print("[Recorder] SUCCESS: Recording started. Target file: \(url.lastPathComponent)")
         } catch {
             errorMessage = "Couldn't start recording."
+            print("[Recorder] FAILURE: Could not write output file: \(error.localizedDescription)")
         }
     }
 
@@ -385,21 +486,43 @@ final class AudioEngineManager: ObservableObject {
         isRecording = false
         let url = recordingURL
         recordingURL = nil
+        
+        print("[Recorder] SUCCESS: Recording finalized.")
         guard shouldLoad, let url = url else { return }
         stopMic()
         load(url: url)
     }
 
-    // MARK: - Chain editing and fun stuff
+    // MARK: - Parameter and Effect Mutation Handlers
 
-    /// Move an effect up (-1) or down (+1) in the chain.
+    func setEffectEnabled(_ effect: EffectModule, enabled: Bool) {
+        guard let index = effects.firstIndex(where: { $0.id == effect.id }) else {
+            print("[EffectsManager] FAILURE: Could not find effect with key '\(effect.key)'")
+            return
+        }
+        effects[index].isEnabled = enabled
+        print("[EffectsManager] SUCCESS: Set '\(effects[index].key)' enabled state to: \(enabled)")
+    }
+
+    func updateParameter(effect: EffectModule, parameterID: String, value: Float) {
+        guard let fxIndex = effects.firstIndex(where: { $0.id == effect.id }) else { return }
+        if let paramIndex = effects[fxIndex].parameters.firstIndex(where: { $0.id == parameterID }) {
+            effects[fxIndex].parameters[paramIndex].value = value
+            print("[EffectsManager] SUCCESS: Updated '\(effects[fxIndex].key)' parameter '\(parameterID)' -> \(value)")
+        }
+    }
+
     func move(_ effect: EffectModule, by offset: Int) {
         guard let i = effects.firstIndex(where: { $0.id == effect.id }) else { return }
         let j = i + offset
-        guard effects.indices.contains(j) else { return }
-        if isPlaying { stop() }   // safest to reconnect while silent
+        guard effects.indices.contains(j) else {
+            print("[EffectsManager] WARNING: Cannot move effect '\(effect.key)' out of index bounds.")
+            return
+        }
+        if isPlaying { stop() }
         effects.swapAt(i, j)
         rebuildChain()
+        print("[EffectsManager] SUCCESS: Moved '\(effect.key)' from index \(i) to \(j).")
     }
 
     func randomize() {
@@ -409,22 +532,26 @@ final class AudioEngineManager: ObservableObject {
             }
             fx.isEnabled = Bool.random()
         }
+        print("[EffectsManager] SUCCESS: All parameters randomized across active modules.")
     }
 
     func resetAll() {
         effects.forEach { $0.reset() }
+        print("[EffectsManager] SUCCESS: All effect parameters reset to defaults.")
     }
 
     // MARK: - Presets
 
     func snapshot(name: String) -> Preset {
-        Preset(name: name, effects: effects.map { fx in
+        let preset = Preset(name: name, effects: effects.map { fx in
             EffectState(
                 key: fx.key,
                 enabled: fx.isEnabled,
                 values: Dictionary(uniqueKeysWithValues: fx.parameters.map { ($0.id, $0.value) })
             )
         })
+        print("[Presets] SUCCESS: Captured preset snapshot named '\(name)' with \(preset.effects.count) effects.")
+        return preset
     }
 
     func apply(_ preset: Preset) {
@@ -435,5 +562,6 @@ final class AudioEngineManager: ObservableObject {
             }
             fx.isEnabled = state.enabled
         }
+        print("[Presets] SUCCESS: Applied preset '\(preset.name)' to current engine state.")
     }
 }

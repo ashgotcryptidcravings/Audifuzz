@@ -12,8 +12,8 @@ workflows:
         XCODE_SCHEME: "Audifuzz"
         BUNDLE_ID: "com.Foundation.audifuzz"   # change me
       ios_signing:
-        distribution_type: development       # or ad_hoc / app_store
-        bundle_identifier: com.yourname.audifuzz
+        distribution_type: ad_hoc       # or ad_hoc / app_store
+        bundle_identifier: com.Foundation.audifuzz
     scripts:
       - name: Set up signing
         script: keychain initialize

@@ -34,6 +34,8 @@
 		729544B03064DEF200B33115 /* FilterEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544843064DDD000B33115 /* FilterEffect.swift */; };
 		729544B13064DEF200B33115 /* OverdriveEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544883064DDD000B33115 /* OverdriveEffect.swift */; };
 		729544B53064DF5F00B33115 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544B43064DF5F00B33115 /* Persistence.swift */; };
+		729544DF3065897F00B33115 /* FILE_TREE.md in Resources */ = {isa = PBXBuildFile; fileRef = 729544DE3065897F00B33115 /* FILE_TREE.md */; };
+		729544E13065906E00B33115 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544E03065906E00B33115 /* PreferencesView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +68,8 @@
 		729544903064DE5500B33115 /* SynthRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthRenderer.swift; sourceTree = "<group>"; };
 		729544913064DE5500B33115 /* SynthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthModels.swift; sourceTree = "<group>"; };
 		729544B43064DF5F00B33115 /* Persistence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
+		729544DE3065897F00B33115 /* FILE_TREE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = FILE_TREE.md; sourceTree = "<group>"; };
+		729544E03065906E00B33115 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,6 +112,7 @@
 				729544B43064DF5F00B33115 /* Persistence.swift */,
 				7295446830601E5300B33115 /* Dial.swift */,
 				729543E430600B9400B33115 /* AGENTS.md */,
+				729544DE3065897F00B33115 /* FILE_TREE.md */,
 				729543E230600B8C00B33115 /* codemagic.yaml */,
 				729543D730600A4400B33115 /* Assets.xcassets */,
 				729543D930600A4400B33115 /* Audifuzz.entitlements */,
@@ -133,6 +138,7 @@
 				729544823064DDA300B33115 /* EffectCardView.swift */,
 				7295447E3064DDA200B33115 /* SoundLabView.swift */,
 				729544803064DDA200B33115 /* SpatialCardView.swift */,
+				729544E03065906E00B33115 /* PreferencesView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -228,6 +234,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				729544DF3065897F00B33115 /* FILE_TREE.md in Resources */,
 				729543E330600B8C00B33115 /* codemagic.yaml in Resources */,
 				729543DC30600A4400B33115 /* Preview Assets.xcassets in Resources */,
 				729543E530600B9400B33115 /* AGENTS.md in Resources */,
@@ -255,6 +262,7 @@
 				729544A83064DEC300B33115 /* SoundLabView.swift in Sources */,
 				729544B03064DEF200B33115 /* FilterEffect.swift in Sources */,
 				729544A03064DEC300B33115 /* SynthModels.swift in Sources */,
+				729544E13065906E00B33115 /* PreferencesView.swift in Sources */,
 				729543D430600A4200B33115 /* Audifuzz.xcdatamodeld in Sources */,
 				7295449E3064DEC300B33115 /* Preset.swift in Sources */,
 				729544AE3064DEF200B33115 /* BitCrushEffect.swift in Sources */,
@@ -392,6 +400,7 @@
 				DEVELOPMENT_TEAM = PULJN6655X;
 				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_PREVIEWS = YES;
+				GCC_OPTIMIZATION_LEVEL = fast;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Audiofuzz uses the mic to distort anything you record!";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;

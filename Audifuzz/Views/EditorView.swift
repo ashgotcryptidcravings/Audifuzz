@@ -6,13 +6,23 @@ struct EditorView: View {
     @ObservedObject var manager: AudioEngineManager
     @State private var showImporter = false
 
+/// Main page title
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                Text("Audifuzz").font(.largeTitle.bold())
+                VStack(spacing: 4) {
+                    Text("Audifuzz")
+                        .font(.largeTitle.bold())
+                    
+                    Text("Distort any audio! Use an existing file or live audio from your microphone.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
                 statusLine
                 sourcePicker
                 controls
+/// Title End
 
                 if let message = manager.errorMessage {
                     Text(message).font(.footnote).foregroundColor(.red)
@@ -59,8 +69,10 @@ struct EditorView: View {
             }
         }
         .pickerStyle(.segmented)
+        .frame(width: 240)
     }
 
+    /// Button Toolbar
     private var controls: some View {
         HStack {
             if manager.source == .file {

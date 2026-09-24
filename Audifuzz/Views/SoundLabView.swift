@@ -120,17 +120,79 @@ struct EqualizerCardView: View {
     private let labels = ["60", "250", "1k", "4k", "12k"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Equalizer").font(.headline)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 60), spacing: 8)], spacing: 12) {
+            
+            HStack(spacing: 20) {
                 ForEach(0..<labels.count, id: \.self) { i in
-                    Dial(title: labels[i],
-                         value: Binding(get: { lab.eqGains[i] }, set: { lab.eqGains[i] = $0 }),
-                         range: -18...18, size: 48,
-                         format: { String(format: "%+.0f dB", $0) })
+                    EQFader(
+                        label: labels[i],
+                        value: Binding(
+                            get: { lab.eqGains[i] },
+                            set: { lab.eqGains[i] = $0 }
+                        )
+                    )
                 }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
         }
         .card()
+    }
+}
+
+struct EQFader: View {
+    let label: String
+    @Binding var value: Float
+    var range: ClosedRange<Float> = -18...18
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(String(format: "%+.0f", value))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .frame(height: 14)
+
+            GeometryReader { geo in
+                let height = geo.size.height
+                let percentage = CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound))
+                let thumbY = height * (1 - percentage)
+
+                ZStack(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(width: 4)
+                        .cornerRadius(2)
+                        .frame(maxHeight: .infinity)
+                        .position(x: geo.size.width / 2, y: height / 2)
+
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.4))
+                        .frame(width: 12, height: 1)
+                        .position(x: geo.size.width / 2, y: height * 0.5)
+
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.accentColor)
+                        .frame(width: 24, height: 12)
+                        .position(x: geo.size.width / 2, y: thumbY)
+                        .shadow(radius: 1)
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { valueGesture in
+                            let dragY = valueGesture.location.y
+                            let clampedY = min(max(0, dragY), height)
+                            let newPct = 1.0 - (clampedY / height)
+                            let newValue = range.lowerBound + Float(newPct) * (range.upperBound - range.lowerBound)
+                            value = min(max(range.lowerBound, newValue), range.upperBound)
+                        }
+                )
+            }
+            .frame(width: 32, height: 130)
+
+            Text(label)
+                .font(.caption)
+                .fontWeight(.medium)
+        }
     }
 }
