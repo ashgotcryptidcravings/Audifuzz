@@ -7,14 +7,34 @@ private struct LabError: Error {}
 final class SoundLabEngine: ObservableObject {
     static let eqFrequencies: [Float] = [60, 250, 1000, 4000, 12000]
 
-    @Published var voices: [Voice] = [Voice()] { didSet { renderer.update(voices) } }
-    @Published var eqGains: [Float] = [0, 0, 0, 0, 0] {
-        didSet { SoundLabEngine.configureEQ(eq, gains: eqGains) }
+    @Published var voices: [Voice] = [Voice()] {
+        didSet {
+            renderer.update(voices)
+        }
     }
-    @Published var duration: Float = 4                      // seconds to save
+    
+    @Published var eqGains: [Float] = [0, 0, 0, 0, 0] {
+        didSet {
+            SoundLabEngine.configureEQ(eq, gains: eqGains)
+        }
+    }
+    
+    @Published var duration: Float = 4 {
+        didSet {
+            print("[SoundLabEngine] Target save duration changed to: \(duration) seconds")
+        }
+    }
+    
     @Published private(set) var isPlaying = false
     @Published private(set) var isSaving = false
-    @Published var statusMessage: String?
+    @Published private(set) var waveform = Array(repeating: Float.zero, count: 128)
+    @Published var statusMessage: String? {
+        didSet {
+            if let msg = statusMessage {
+                print("[SoundLabEngine] Status message: '\(msg)'")
+            }
+        }
+    }
     @Published private(set) var samples: [URL] = []
 
     private let renderer = SynthRenderer()
@@ -23,22 +43,33 @@ final class SoundLabEngine: ObservableObject {
     private var sourceNode: AVAudioSourceNode?
 
     init() {
+        print("[SoundLabEngine] Initializing Sound Lab engine...")
         renderer.update(voices)
         SoundLabEngine.configureEQ(eq, gains: eqGains)
         refreshSamples()
+        print("[SoundLabEngine] Initialization complete.")
     }
 
     // MARK: - Instruments
 
     func addVoice() {
-        guard voices.count < SynthRenderer.maxVoices else { return }
+        guard voices.count < SynthRenderer.maxVoices else {
+            print("[SoundLabEngine] WARNING: Max voices reached (\(SynthRenderer.maxVoices)). Cannot add more.")
+            return
+        }
         let base = voices.last?.frequency ?? 220
-        voices.append(Voice(frequency: min(base * 1.5, 5000)))
+        let newFreq = min(base * 1.5, 5000)
+        voices.append(Voice(frequency: newFreq))
+        print("[SoundLabEngine] SUCCESS: Added new voice at frequency: \(newFreq) Hz")
     }
 
     func removeVoice(_ id: UUID) {
-        guard voices.count > 1 else { return }
+        guard voices.count > 1 else {
+            print("[SoundLabEngine] WARNING: Cannot remove last remaining voice.")
+            return
+        }
         voices.removeAll { $0.id == id }
+        print("[SoundLabEngine] SUCCESS: Removed voice with ID: \(id)")
     }
 
     /// A binding that looks the voice up by id, so it stays safe when voices are removed.
@@ -46,18 +77,22 @@ final class SoundLabEngine: ObservableObject {
         Binding(
             get: { self.voices.first { $0.id == id } ?? Voice() },
             set: { newValue in
-                if let i = self.voices.firstIndex(where: { $0.id == id }) { self.voices[i] = newValue }
+                if let i = self.voices.firstIndex(where: { $0.id == id }) {
+                    self.voices[i] = newValue
+                }
             })
     }
 
     // MARK: - Live preview
 
     func togglePlay() {
+        print("[SoundLabEngine] Toggle preview playback requested...")
         if isPlaying { stopPreview() } else { startPreview() }
     }
 
     private func buildGraphIfNeeded() {
         guard sourceNode == nil else { return }
+        print("[SoundLabEngine] Building internal preview audio graph...")
         let rate = engine.outputNode.outputFormat(forBus: 0).sampleRate
         let sampleRate = rate > 0 ? rate : 44100
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
@@ -66,20 +101,32 @@ final class SoundLabEngine: ObservableObject {
         engine.attach(eq)
         engine.connect(node, to: eq, format: format)
         engine.connect(eq, to: engine.mainMixerNode, format: format)
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            self?.captureWaveform(from: buffer)
+        }
         sourceNode = node
+        print("[SoundLabEngine] Audio graph successfully linked.")
     }
 
     private func startPreview() {
         #if os(iOS)
-        try? AVAudioSession.sharedInstance().setCategory(.playback)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback)
+            try AVAudioSession.sharedInstance().setActive(true)
+            print("[AudioSession] Configured category: playback.")
+        } catch {
+            print("[AudioSession] FAILURE: Could not activate session: \(error.localizedDescription)")
+        }
         #endif
+        
         buildGraphIfNeeded()
         do {
             try engine.start()
             isPlaying = true
+            print("[SoundLabEngine] SUCCESS: Live synth preview started.")
         } catch {
             statusMessage = "Couldn't start the preview."
+            print("[SoundLabEngine] FAILURE: Could not start live preview engine: \(error.localizedDescription)")
         }
     }
 
@@ -87,6 +134,30 @@ final class SoundLabEngine: ObservableObject {
         guard isPlaying else { return }
         engine.stop()
         isPlaying = false
+        waveform = Array(repeating: 0, count: waveform.count)
+        print("[SoundLabEngine] SUCCESS: Live synth preview stopped.")
+    }
+
+    private func captureWaveform(from buffer: AVAudioPCMBuffer) {
+        guard let channels = buffer.floatChannelData else { return }
+        let frameCount = Int(buffer.frameLength)
+        guard frameCount > 0 else { return }
+
+        let channelCount = Int(buffer.format.channelCount)
+        let pointCount = 128
+        var points = Array(repeating: Float.zero, count: pointCount)
+        for point in 0..<pointCount {
+            let frame = min(frameCount - 1, point * frameCount / pointCount)
+            var sample: Float = 0
+            for channel in 0..<channelCount {
+                sample += channels[channel][frame]
+            }
+            points[point] = sample / Float(max(1, channelCount))
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.waveform = points
+        }
     }
 
     // MARK: - Equalizer
@@ -110,12 +181,17 @@ final class SoundLabEngine: ObservableObject {
     // MARK: - Saving
 
     func saveSample() {
-        guard !isSaving else { return }
+        guard !isSaving else {
+            print("[SoundLabEngine] WARNING: Save call ignored. Rendering already in progress.")
+            return
+        }
         isSaving = true
         statusMessage = "Saving…"
         let seconds = Double(duration)
         let gains = eqGains
         let renderer = self.renderer
+        
+        print("[SampleRenderer] Starting offline render for \(seconds) seconds...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result: Result<URL, Error>
             do {
@@ -129,9 +205,11 @@ final class SoundLabEngine: ObservableObject {
                 switch result {
                 case .success(let url):
                     self.statusMessage = "Saved \(url.lastPathComponent)"
+                    print("[SampleRenderer] SUCCESS: Rendered WAV file saved to: \(url.path)")
                     self.refreshSamples()
-                case .failure:
+                case .failure(let error):
                     self.statusMessage = "Couldn't save the sound."
+                    print("[SampleRenderer] FAILURE: Could not render audio file. Error: \(error.localizedDescription)")
                 }
             }
         }
@@ -180,10 +258,20 @@ final class SoundLabEngine: ObservableObject {
 
     // MARK: - Saved samples
 
-    func refreshSamples() { samples = SampleStorage.list() }
+    func refreshSamples() {
+        SampleStorage.pruneToLimit()
+        samples = SampleStorage.list()
+        print("[SampleStorage] Refreshed samples list. Found \(samples.count) file(s).")
+    }
 
     func deleteSample(_ url: URL) {
-        try? FileManager.default.removeItem(at: url)
+        print("[SampleStorage] Attempting to delete file at: \(url.lastPathComponent)")
+        do {
+            try FileManager.default.removeItem(at: url)
+            print("[SampleStorage] SUCCESS: Deleted \(url.lastPathComponent)")
+        } catch {
+            print("[SampleStorage] FAILURE: Could not delete \(url.lastPathComponent). Error: \(error.localizedDescription)")
+        }
         refreshSamples()
     }
 }

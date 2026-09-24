@@ -8,10 +8,18 @@ struct PreferencesView: View {
     
     // Dedicated state for Caching & Speed settings
     @AppStorage("memoryAllocationGB") private var memoryAllocationGB: Int = 6
-    @AppStorage("cacheLocation") private var cacheLocation: String = "ram"
+    @AppStorage("cacheLocation") private var cacheLocation: String = "disk"
     
     // Local state for UI feedback
     @State private var cacheCleared = false
+
+    private func setPreference(_ key: String) {
+        NotificationCenter.default.post(
+            name: .audifuzzPreferenceChanged,
+            object: nil,
+            userInfo: ["key": key]
+        )
+    }
 
     var body: some View {
         TabView {
@@ -21,6 +29,7 @@ struct PreferencesView: View {
                     get: { autoPlayOnLoad },
                     set: { newValue in
                         autoPlayOnLoad = newValue
+                        setPreference("autoPlayOnLoad")
                         print("[Preferences] SET Auto-Play on Load -> \(newValue)")
                     }
                 ))
@@ -29,6 +38,7 @@ struct PreferencesView: View {
                     get: { bufferSize },
                     set: { newValue in
                         bufferSize = newValue
+                        setPreference("bufferSize")
                         print("[Preferences] SET Buffer Size -> \(newValue) samples")
                     }
                 )) {
@@ -48,6 +58,7 @@ struct PreferencesView: View {
                     get: { defaultSampleRate },
                     set: { newValue in
                         defaultSampleRate = newValue
+                        setPreference("defaultSampleRate")
                         print("[Preferences] SET Sample Rate -> \(newValue) Hz")
                     }
                 )) {
@@ -64,10 +75,11 @@ struct PreferencesView: View {
             // Caching & Speed Tab
             Form {
                 VStack(alignment: .leading, spacing: 6) {
-                    Picker("Memory Allocation", selection: Binding(
+                    Picker("Sample Cache Limit", selection: Binding(
                         get: { memoryAllocationGB },
                         set: { newValue in
                             memoryAllocationGB = newValue
+                            setPreference("memoryAllocationGB")
                             print("[Preferences] SET Memory Allocation -> \(newValue) GB")
                         }
                     )) {
@@ -80,7 +92,7 @@ struct PreferencesView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(.orange)
-                            Text("Warning: Allocating 10GB may cause high resource usage and system slowdowns.")
+                            Text("Warning: A 10 GB cache limit may use substantial disk or temporary storage.")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -93,6 +105,7 @@ struct PreferencesView: View {
                     get: { cacheLocation },
                     set: { newValue in
                         cacheLocation = newValue
+                        setPreference("cacheLocation")
                         print("[Preferences] SET Cache Location -> '\(newValue)'")
                     }
                 )) {
@@ -104,7 +117,7 @@ struct PreferencesView: View {
                     .padding(.vertical, 4)
                 
                 HStack {
-                    Button(cacheCleared ? "Cache Cleared!" : "Clear Temporary Cache") {
+                    Button(cacheCleared ? "Cache Cleared!" : "Clear Sample Cache") {
                         clearTemporaryCache()
                     }
                     .disabled(cacheCleared)
@@ -124,31 +137,19 @@ struct PreferencesView: View {
         .frame(width: 480, height: 280)
     }
 
-    /// Flushes all temporary audio files generated in the app's temp directory
+    /// Removes saved samples from the currently selected Audifuzz cache.
     private func clearTemporaryCache() {
         print("[Preferences] Initiating temporary cache clear...")
-        let tempDir = FileManager.default.temporaryDirectory
-        do {
-            let files = try FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
-            var deletedCount = 0
-            for file in files {
-                if (try? FileManager.default.removeItem(at: file)) != nil {
-                    deletedCount += 1
-                }
-            }
-            print("[Preferences] SUCCESS: Cleared \(deletedCount) file(s) from temporary cache.")
-            
+        let deletedCount = SampleStorage.clearCache()
+        print("[Preferences] SUCCESS: Cleared \(deletedCount) sample file(s) from Audifuzz cache.")
+
+        withAnimation {
+            cacheCleared = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation {
-                cacheCleared = true
+                cacheCleared = false
             }
-            // Reset button label after 2 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                withAnimation {
-                    cacheCleared = false
-                }
-            }
-        } catch {
-            print("[Preferences] FAILURE: Could not clear cache: \(error.localizedDescription)")
         }
     }
 
@@ -159,7 +160,8 @@ struct PreferencesView: View {
         bufferSize = 512
         autoPlayOnLoad = true
         memoryAllocationGB = 6
-        cacheLocation = "ram"
+        cacheLocation = "disk"
+        setPreference("all")
         print("[Preferences] SUCCESS: All preferences restored to default state.")
     }
 }

@@ -1,6 +1,10 @@
 import AVFoundation
 import SwiftUI
 
+extension Notification.Name {
+    static let audifuzzPreferenceChanged = Notification.Name("AudifuzzPreferenceChanged")
+}
+
 /// Editor audio. Two engines on purpose:
 ///
 /// Output engine (never touches the mic, so it can't hit the macOS duplex crash):
@@ -64,7 +68,7 @@ final class AudioEngineManager: ObservableObject {
     private let player = AVAudioPlayerNode()
     private let micPlayer = AVAudioPlayerNode()
     private let sourceMixer = AVAudioMixerNode()
-    private var graphFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+    private var graphFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2) ?? AVAudioFormat()
     private var file: AVAudioFile?
     private var scopedURL: URL?
     private var playbackID = 0
@@ -81,6 +85,7 @@ final class AudioEngineManager: ObservableObject {
     private var micGeneration = 0
     private var micPlayerReady = false
     private var recordingFile: AVAudioFile?
+    private var preferenceObserver: NSObjectProtocol?
 
     init() {
         print("[AudioEngineManager] Initializing audio engine and effect modules...")
@@ -122,8 +127,41 @@ final class AudioEngineManager: ObservableObject {
             self.stopMic()
             self.errorMessage = "The microphone changed. Tap Mic to start it again."
         }
+
+        preferenceObserver = NotificationCenter.default.addObserver(
+            forName: .audifuzzPreferenceChanged, object: nil, queue: .main
+        ) { [weak self] notification in
+            let key = notification.userInfo?["key"] as? String
+            self?.applyPreferenceChange(key)
+        }
         
         print("[AudioEngineManager] Initialization complete. Engine ready.")
+    }
+
+    deinit {
+        if let observer = preferenceObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func applyPreferenceChange(_ key: String?) {
+        switch key {
+        case "defaultSampleRate":
+            if file != nil || isMicLive {
+                restartEngine()
+            } else {
+                refreshGraphFormat()
+            }
+        case "bufferSize":
+            if isMicLive {
+                installMicTap()
+            }
+            if file != nil {
+                restartEngine()
+            }
+        default:
+            break
+        }
     }
 
     // MARK: - File loading
@@ -137,7 +175,20 @@ final class AudioEngineManager: ObservableObject {
         isLoading = true
         errorMessage = nil
         let scoped = url.startAccessingSecurityScopedResource()
+        
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Guard against empty files or locked descriptors before opening
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  let fileSize = attributes[.size] as? UInt64, fileSize > 0 else {
+                DispatchQueue.main.async {
+                    if scoped { url.stopAccessingSecurityScopedResource() }
+                    self?.isLoading = false
+                    self?.errorMessage = "Recorded file was empty."
+                    print("[FileLoader] FAILURE: File at \(url.path) is 0 bytes or unreadable.")
+                }
+                return
+            }
+
             do {
                 let f = try AVAudioFile(forReading: url)
                 DispatchQueue.main.async {
@@ -202,6 +253,7 @@ final class AudioEngineManager: ObservableObject {
         file.framePosition = 0
         playbackID &+= 1
         let id = playbackID
+        
         player.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self = self, self.playbackID == id else { return }
@@ -211,7 +263,9 @@ final class AudioEngineManager: ObservableObject {
                 self.armFile()
             }
         }
-        player.prepare(withFrameCount: userBufferSize)
+        
+        let safeBuffer = max(256, userBufferSize)
+        player.prepare(withFrameCount: safeBuffer)
     }
 
     // MARK: - Output engine plumbing
@@ -237,9 +291,14 @@ final class AudioEngineManager: ObservableObject {
 
     private func refreshGraphFormat() {
         let hardwareRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let selectedRate = hardwareRate > 0 ? hardwareRate : userSampleRate
-        graphFormat = AVAudioFormat(standardFormatWithSampleRate: selectedRate, channels: 2)!
-        print("[GraphFormat] Updated processing format: \(selectedRate) Hz, 2 Channels.")
+        let selectedRate = userSampleRate > 0 ? userSampleRate : hardwareRate
+        let validRate = selectedRate > 0 ? selectedRate : 44100.0
+        
+        // Always fall back to standard 44.1kHz stereo if format allocation fails
+        graphFormat = AVAudioFormat(standardFormatWithSampleRate: validRate, channels: 2)
+            ?? AVAudioFormat(standardFormatWithSampleRate: 44100.0, channels: 2)!
+        
+        print("[GraphFormat] Updated processing format: \(graphFormat.sampleRate) Hz, \(graphFormat.channelCount) Channels.")
     }
 
     @discardableResult
@@ -292,9 +351,12 @@ final class AudioEngineManager: ObservableObject {
     }
 
     private func connectPlayer() {
-        guard let file = file else { return }
-        engine.connect(player, to: sourceMixer, fromBus: 0, toBus: 0, format: file.processingFormat)
-        print("[AudioEngine] Connected file player node to source mixer.")
+        engine.disconnectNodeOutput(player)
+        guard file != nil else { return }
+        
+        // Connect using graphFormat so the mixer and effect chain share the exact same format
+        engine.connect(player, to: sourceMixer, fromBus: 0, toBus: 0, format: graphFormat)
+        print("[AudioEngine] Connected file player node to source mixer using graphFormat.")
     }
 
     private func connectMic() {
@@ -308,7 +370,9 @@ final class AudioEngineManager: ObservableObject {
 
     private func rebuildChain() {
         let gf = graphFormat
-        let mono = AVAudioFormat(standardFormatWithSampleRate: gf.sampleRate, channels: 1)!
+        let validRate = gf.sampleRate > 0 ? gf.sampleRate : 44100.0
+        guard let mono = AVAudioFormat(standardFormatWithSampleRate: validRate, channels: 1) else { return }
+        
         engine.disconnectNodeOutput(sourceMixer)
         effects.forEach { engine.disconnectNodeOutput($0.unit) }
         engine.disconnectNodeOutput(spatial.mixer)
@@ -388,10 +452,7 @@ final class AudioEngineManager: ObservableObject {
             return
         }
         micFormat = format
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: userBufferSize, format: format) { [weak self] buffer, _ in
-            self?.handleMic(buffer)
-        }
+        installMicTap()
         do {
             micEngine.prepare()
             try micEngine.start()
@@ -404,6 +465,15 @@ final class AudioEngineManager: ObservableObject {
             return
         }
         restartEngine()
+    }
+
+    private func installMicTap() {
+        guard let format = micFormat else { return }
+        let input = micEngine.inputNode
+        input.removeTap(onBus: 0)
+        input.installTap(onBus: 0, bufferSize: userBufferSize, format: format) { [weak self] buffer, _ in
+            self?.handleMic(buffer)
+        }
     }
 
     func stopMic() {
@@ -464,15 +534,26 @@ final class AudioEngineManager: ObservableObject {
             print("[Recorder] WARNING: Recording attempt aborted. Microphone is not active.")
             return
         }
-        let url = SampleStorage.newURL(prefix: "Mic", ext: "caf")
+        
+        // 1. Switch to WAV to match Sound Lab's proven saving method
+        let fileName = "Mic-\(Int(Date().timeIntervalSince1970)).wav"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        
+        // 2. Force standard interleaved formatting so WAV doesn't crash on initialization
+        guard let fileFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                             sampleRate: format.sampleRate,
+                                             channels: format.channelCount,
+                                             interleaved: true) else { return }
+        
         do {
-            let out = try AVAudioFile(forWriting: url, settings: format.settings)
+            let out = try AVAudioFile(forWriting: url, settings: fileFormat.settings)
             micLock.lock()
             recordingFile = out
             micLock.unlock()
             recordingURL = url
             isRecording = true
-            print("[Recorder] SUCCESS: Recording started. Target file: \(url.lastPathComponent)")
+            
+            print("[Recorder] SUCCESS: Recording started. Target file: \(url.path)")
         } catch {
             errorMessage = "Couldn't start recording."
             print("[Recorder] FAILURE: Could not write output file: \(error.localizedDescription)")
@@ -480,17 +561,29 @@ final class AudioEngineManager: ObservableObject {
     }
 
     private func finishRecording(load shouldLoad: Bool) {
+        // Immediately toggle state to prevent infinite loops with stopMic()
+        isRecording = false
+        if shouldLoad { stopMic() }
+        
         micLock.lock()
+        var fileToClose: AVAudioFile? = recordingFile
         recordingFile = nil
         micLock.unlock()
-        isRecording = false
-        let url = recordingURL
+        
+        let safeURL = recordingURL
         recordingURL = nil
         
+        // 3. EXPLICITLY KILL THE WRITER NOW. Do not let ARC wait for the function scope to end.
+        fileToClose = nil
+        
         print("[Recorder] SUCCESS: Recording finalized.")
-        guard shouldLoad, let url = url else { return }
-        stopMic()
-        load(url: url)
+        
+        guard shouldLoad, let url = safeURL else { return }
+        
+        // 4. Give the OS disk a half-second to flush the WAV header before ripping it open
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.load(url: url)
+        }
     }
 
     // MARK: - Parameter and Effect Mutation Handlers

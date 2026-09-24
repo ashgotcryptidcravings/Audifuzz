@@ -63,6 +63,17 @@ Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - Don't rename or reorganize files without being asked.
 - When you add, remove, or rename a file, update the layout in this file and `FILE_TREE.md`.
 
+## Toolchain and agent consistency
+- The local verified toolchain is Xcode 14.2 (build 14C18), Swift 5.0 mode, macOS SDK 13.1, and iOS SDK 16.2. Codemagic is allowed to use its latest available Xcode and deployment image for release builds.
+- macOS 12.0 (Monterey) is a hard deployment floor and must always remain supported. iOS 16.2 is the current iOS deployment floor. Check API availability before using newer SwiftUI, AVFoundation, or platform APIs; gate newer APIs explicitly when needed.
+- There is no upper OS compatibility cap for Codemagic builds. Keep the minimum deployment targets stable while allowing the CI image to advance to newer Apple OS and SDK versions.
+- Validate macOS changes with `xcodebuild -project Audifuzz.xcodeproj -scheme Audifuzz -configuration Debug -sdk macosx build CODE_SIGNING_ALLOWED=NO`.
+- Treat a successful build as compile validation only. Do not claim that microphone, file loading, or audio behavior was runtime-tested unless it was actually exercised.
+- Read this file before editing and preserve the existing architecture, effect keys, public parameter IDs, and user changes.
+- Start from the nearest owning implementation and make the smallest focused change. Avoid speculative refactors and unrelated formatting changes.
+- Some source files are referenced by the Xcode project from outside this workspace. Do not relocate or recreate those files unless explicitly requested; verify the project file before changing source layout.
+- After an edit, run the narrowest available validation first, then run the full macOS build when the change affects shared audio or UI code.
+
 ## Roadmap (ideas, not requirements)
 - Preset picker page using `PresetStore`
 - Custom bitcrusher, ring mod, and wavefolder via render blocks

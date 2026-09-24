@@ -11,7 +11,7 @@ struct EditorView: View {
         ScrollView {
             VStack(spacing: 14) {
                 VStack(spacing: 4) {
-                    Text("Audifuzz")
+                    Text("Audifuzz Beta")
                         .font(.largeTitle.bold())
                     
                     Text("Distort any audio! Use an existing file or live audio from your microphone.")
@@ -46,7 +46,10 @@ struct EditorView: View {
         Group {
             if manager.isLoading {
                 HStack(spacing: 8) {
-                    ProgressView().scaleEffect(0.7)
+                    Circle()
+                        .trim(from: 0, to: 0.7)
+                        .stroke(Color.secondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .frame(width: 12, height: 12)
                     Text("Loading file…")
                 }
             } else if manager.source == .mic {
@@ -60,15 +63,16 @@ struct EditorView: View {
     }
 
     private var sourcePicker: some View {
-        Picker("Source", selection: Binding(
-            get: { manager.source },
-            set: { manager.setSource($0) }
-        )) {
-            ForEach(AudioEngineManager.Source.allCases) { s in
-                Text(s.rawValue).tag(s)
+        HStack(spacing: 0) {
+            ForEach(AudioEngineManager.Source.allCases) { source in
+                Button(source.rawValue) {
+                    manager.setSource(source)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(manager.source == source ? .accentColor : .secondary)
+                .opacity(manager.source == source ? 1 : 0.55)
             }
         }
-        .pickerStyle(.segmented)
         .frame(width: 240)
     }
 
