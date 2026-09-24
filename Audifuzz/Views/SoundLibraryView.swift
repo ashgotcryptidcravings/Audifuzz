@@ -6,6 +6,11 @@ struct SoundLibraryView: View {
     var onUseSample: (URL) -> Void
 
     var body: some View {
+        // Keep one stable snapshot for this render. `entries` performs filesystem
+        // and bundle lookups, so evaluating it repeatedly can also make SwiftUI
+        // replace rows while macOS is resolving a click.
+        let entries = BuiltInSoundLibrary.entries
+
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -16,15 +21,19 @@ struct SoundLibraryView: View {
                 }
 
                 VStack(spacing: 0) {
-                    ForEach(BuiltInSoundLibrary.entries) { entry in
+                    ForEach(entries) { entry in
+                        // Do not apply `.buttonStyle(.plain)` to a NavigationLink
+                        // on macOS. In a NavigationView sidebar/detail hierarchy
+                        // that style can remove the link's native hit target,
+                        // leaving rows visible but apparently unselectable.
                         NavigationLink {
                             SoundDetailView(entry: entry, lab: lab, onUseSample: onUseSample)
                         } label: {
                             SoundLibraryRow(entry: entry)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .buttonStyle(.plain)
 
-                        if entry.id != BuiltInSoundLibrary.entries.last?.id {
+                        if entry.id != entries.last?.id {
                             Divider().padding(.leading, 58)
                         }
                     }
