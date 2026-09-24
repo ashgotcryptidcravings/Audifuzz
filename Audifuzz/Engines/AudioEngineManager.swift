@@ -1,5 +1,8 @@
 import AVFoundation
 import SwiftUI
+#if os(macOS)
+import CoreAudio
+#endif
 
 extension Notification.Name {
     static let audifuzzPreferenceChanged = Notification.Name("AudifuzzPreferenceChanged")
@@ -56,6 +59,16 @@ final class AudioEngineManager: ObservableObject {
         return resolved
     }
 
+    private var preferredInputDeviceID: UInt32 {
+        let id = UserDefaults.standard.integer(forKey: "inputDeviceID")
+        return id > 0 ? UInt32(id) : 0
+    }
+
+    private var preferredOutputDeviceID: UInt32 {
+        let id = UserDefaults.standard.integer(forKey: "outputDeviceID")
+        return id > 0 ? UInt32(id) : 0
+    }
+
     private var autoPlayOnLoad: Bool {
         if UserDefaults.standard.object(forKey: "autoPlayOnLoad") == nil { return true }
         let enabled = UserDefaults.standard.bool(forKey: "autoPlayOnLoad")
@@ -103,6 +116,7 @@ final class AudioEngineManager: ObservableObject {
         engine.attach(spatial.mixer)
         engine.attach(spatial.environment)
         effects.forEach { engine.attach($0.unit) }
+        applyPreferredDevices()
         spatial.onRouteChange = { [weak self] in
             guard let self = self else { return }
             print("[SpatialStage] Route configuration changed. Rebuilding chain...")
@@ -159,6 +173,15 @@ final class AudioEngineManager: ObservableObject {
             if file != nil {
                 restartEngine()
             }
+        case "inputDevice":
+            if isMicLive {
+                stopMic()
+                startMic()
+            } else {
+                applyPreferredDevices()
+            }
+        case "outputDevice":
+            restartEngine()
         default:
             break
         }
@@ -289,6 +312,59 @@ final class AudioEngineManager: ObservableObject {
         #endif
     }
 
+    private func applyPreferredDevices() {
+        #if os(macOS)
+        let inputID = preferredInputDeviceID == 0
+            ? defaultAudioDeviceID(selector: kAudioHardwarePropertyDefaultInputDevice)
+            : preferredInputDeviceID
+        let outputID = preferredOutputDeviceID == 0
+            ? defaultAudioDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice)
+            : preferredOutputDeviceID
+        setAudioUnitDevice(micEngine.inputNode.audioUnit, deviceID: inputID)
+        setAudioUnitDevice(engine.outputNode.audioUnit, deviceID: outputID)
+        let inputLabel = inputID == 0 ? "System Default" : String(inputID)
+        let outputLabel = outputID == 0 ? "System Default" : String(outputID)
+        print("[AudioDevices] Input: \(inputLabel), Output: \(outputLabel)")
+        #endif
+    }
+
+    #if os(macOS)
+    private func defaultAudioDeviceID(selector: AudioObjectPropertySelector) -> AudioDeviceID {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var deviceID = AudioDeviceID(0)
+        var dataSize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &dataSize,
+            &deviceID
+        )
+        return deviceID
+    }
+
+    private func setAudioUnitDevice(_ audioUnit: AudioUnit?, deviceID: AudioDeviceID) {
+        guard let audioUnit else { return }
+        var selectedDeviceID = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &selectedDeviceID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        if status != noErr {
+            print("[AudioDevices] WARNING: Could not select device \(deviceID). OSStatus: \(status)")
+        }
+    }
+    #endif
+
     private func refreshGraphFormat() {
         let hardwareRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
         let selectedRate = userSampleRate > 0 ? userSampleRate : hardwareRate
@@ -331,6 +407,7 @@ final class AudioEngineManager: ObservableObject {
 
         micPlayer.stop()
         engine.stop()
+        applyPreferredDevices()
         configureSession()
         refreshGraphFormat()
         rebuildChain()
@@ -442,6 +519,7 @@ final class AudioEngineManager: ObservableObject {
         errorMessage = nil
         isMicLive = true
         configureSession()
+        applyPreferredDevices()
 
         let input = micEngine.inputNode
         let format = input.outputFormat(forBus: 0)

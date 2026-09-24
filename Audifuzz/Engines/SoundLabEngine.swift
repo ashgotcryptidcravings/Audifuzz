@@ -46,6 +46,7 @@ final class SoundLabEngine: ObservableObject {
         print("[SoundLabEngine] Initializing Sound Lab engine...")
         renderer.update(voices)
         SoundLabEngine.configureEQ(eq, gains: eqGains)
+        BuiltInSoundLibrary.install()
         refreshSamples()
         print("[SoundLabEngine] Initialization complete.")
     }
@@ -259,6 +260,7 @@ final class SoundLabEngine: ObservableObject {
     // MARK: - Saved samples
 
     func refreshSamples() {
+        BuiltInSoundLibrary.install()
         SampleStorage.pruneToLimit()
         samples = SampleStorage.list()
         print("[SampleStorage] Refreshed samples list. Found \(samples.count) file(s).")

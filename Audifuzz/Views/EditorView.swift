@@ -33,7 +33,6 @@ struct EditorView: View {
                         manager.move(fx, by: offset)
                     }
                 }
-                SpatialCardView(stage: manager.spatial)
             }
             .padding()
         }

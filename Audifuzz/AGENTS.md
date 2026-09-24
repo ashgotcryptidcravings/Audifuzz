@@ -63,6 +63,13 @@ Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - Don't rename or reorganize files without being asked.
 - When you add, remove, or rename a file, update the layout in this file and `FILE_TREE.md`.
 
+## Emerging sound-library style
+- Every bundled sound entry has a stable display `name`, an SF Symbol `symbol`, an optional musical `key`, and an optional resource `url`.
+- Use `isPlaceholder` for reserved library slots without an audio file. Placeholders may show details, but must not offer playback or "Use in Editor".
+- Resolve packaged audio with `Bundle.main.url(forResource:withExtension:)`; do not assume bundled files live in `SampleStorage`.
+- Derive file length, channels, bitrate, and date added from the resolved `AVAudioFile` and URL resource values rather than hard-coding technical metadata.
+- Keep bundled audio names stable once published. Adding a file should fill an existing placeholder or add a new entry without renaming existing entries.
+
 ## Toolchain and agent consistency
 - The local verified toolchain is Xcode 14.2 (build 14C18), Swift 5.0 mode, macOS SDK 13.1, and iOS SDK 16.2. Codemagic is allowed to use its latest available Xcode and deployment image for release builds.
 - macOS 12.0 (Monterey) is a hard deployment floor and must always remain supported. iOS 16.2 is the current iOS deployment floor. Check API availability before using newer SwiftUI, AVFoundation, or platform APIs; gate newer APIs explicitly when needed.

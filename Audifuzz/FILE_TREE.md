@@ -16,6 +16,7 @@ Audifuzz-starter/
     ├── AudifuzzApp.swift            App entry point
     ├── Audio/
     │   ├── AudioEngineManager.swift Editor tab audio brain
+    │   ├── BuiltInSoundLibrary.swift Original starter WAV sounds
     │   ├── EffectModule.swift       Base class for all effects
     │   ├── SpatialStage.swift       3D spatializer
     │   ├── SampleStorage.swift      Where saved samples live
@@ -32,12 +33,13 @@ Audifuzz-starter/
     │   └── SoundLabEngine.swift     Sound Lab audio brain, EQ, saving
     ├── Presets/
     │   └── Preset.swift             Save/load effect settings as JSON
-    └── Views/
-        ├── ContentView.swift        Sidebar menu (Editor + Sound Lab)
+  ├── SoundLabView.swift       Sound Lab and Equalizer tab screens
+  ├── SoundLibraryView.swift   Included sound list and detail screen
+        ├── ContentView.swift        Sidebar menu (Editor + Sound Lab + Spatializer + Equalizer)
         ├── EditorView.swift         Editor tab screen
-        ├── SoundLabView.swift       Sound Lab tab screen
+        ├── SoundLabView.swift       Sound Lab and Equalizer tab screens
         ├── EffectCardView.swift     One effect card with dials
-        ├── SpatialCardView.swift    Spatializer card + placement pad
+        ├── SpatialCardView.swift    Spatializer page, Editor summary, and placement field
         └── Dial.swift               The rotary knob control
 ```
 
@@ -68,16 +70,17 @@ Each file wraps one built-in Apple audio unit and maps its dials onto it.
 - **SynthModels.swift**: defines the four wave shapes (round, square, triangle, saw) and the `Voice` type: one instrument with pitch in Hz, volume, ear position, sweep width, and sweep speed. Also turns a pitch into a note name.
 - **SynthRenderer.swift**: makes the actual sound, sample by sample. It adds all instruments together and pans each one between your left and right ear. It avoids locks and memory allocation, so it can run safely on the audio thread.
 - **SoundLabEngine.swift**: runs the Lab: instruments -> 5-band equalizer -> speakers. "Save Sample" renders the same sound to a WAV file faster than real time, so the file matches what you heard.
+- **BuiltInSoundLibrary.swift**: creates three original starter WAV sounds on first launch so the app is useful before the user saves anything.
 
 ### Presets/
 - **Preset.swift**: saves every effect's on/off state and dial values as small JSON files. The Editor can already create and apply them, but there is no picker screen yet.
 
 ### Views/
 - **ContentView.swift**: the sidebar menu. Each page is one link in the list. It creates both audio brains and sends "Use in Editor" from the Lab to the Editor. Its Mac-only sidebar button is wrapped in `#if os(macOS)` so the iPhone build still works.
-- **EditorView.swift**: the main screen. File/Mic switch, Open/Play/Stop/Record buttons, effect cards, and the spatializer card.
-- **SoundLabView.swift**: the Lab screen. Instrument cards, the equalizer card, Save Sample, and the saved samples list. It contains `VoiceCardView` and `EqualizerCardView`.
+- **EditorView.swift**: the main screen. File/Mic switch, Open/Play/Stop/Record buttons, and effect cards. Spatializer controls live in their own sidebar page.
+- **SoundLabView.swift**: the Lab and Equalizer screens. The Lab contains instrument cards, Save Sample, and the saved samples list. The Equalizer page reuses `EqualizerCardView` and the live graph.
 - **EffectCardView.swift**: one effect's card: on/off, move up/down, and a dial for each knob.
-- **SpatialCardView.swift**: the spatializer card plus `SpatialPadView`, a top-down circle where you drag a dot to place the sound.
+- **SpatialCardView.swift**: the full Spatializer page, compact Editor summary, and `SpatialPadView`, a top-down field where you drag a dot to place the sound.
 - **Dial.swift**: the rotary knob. Drag up/right to turn up, down/left to turn down. It supports a log scale for pitch. It also holds the `.card()` style used for every panel.
 
 ## How it all flows

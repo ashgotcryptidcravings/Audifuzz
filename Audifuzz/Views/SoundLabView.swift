@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Second tab: build a sound from stacked waves, shape it with the equalizer,
+/// Second tab: build a sound from stacked waves,
 /// then save it or send it to the Editor tab as a sample.
 struct SoundLabView: View {
     @ObservedObject var lab: SoundLabEngine
@@ -24,7 +24,6 @@ struct SoundLabView: View {
                     .buttonStyle(.bordered)
                     .disabled(lab.voices.count >= SynthRenderer.maxVoices)
 
-                EqualizerCardView(lab: lab)
                 samplesList
             }
             .padding()
@@ -58,7 +57,14 @@ struct SoundLabView: View {
             }
             ForEach(lab.samples, id: \.self) { url in
                 HStack {
-                    Text(url.lastPathComponent).font(.footnote).lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(url.lastPathComponent).font(.footnote).lineLimit(1)
+                        if BuiltInSoundLibrary.isBuiltIn(url) {
+                            Text("Included starter sound")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     Spacer()
                     
                     Button("Use in Editor") {
@@ -80,6 +86,36 @@ struct SoundLabView: View {
             }
         }
         .card()
+    }
+}
+
+struct EqualizerView: View {
+    @ObservedObject var lab: SoundLabEngine
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
+                    Image(systemName: "slider.vertical.3")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundColor(.accentColor)
+                        .frame(width: 54, height: 54)
+                        .background(Color.accentColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Equalizer").font(.largeTitle.bold())
+                        Text("Shape the tone of your Sound Lab instruments across five bands.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                EqualizerCardView(lab: lab)
+            }
+            .padding()
+        }
     }
 }
 
