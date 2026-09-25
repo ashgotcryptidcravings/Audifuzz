@@ -7,6 +7,27 @@ struct MIDIDeviceChoice: Identifiable, Hashable {
     let name: String
 }
 
+struct MIDIPressedNote: Identifiable, Equatable {
+    var id: Int { channel * 128 + Int(note) }
+    let channel: Int
+    let note: UInt8
+    let velocity: UInt8
+}
+
+struct MIDIActivityEvent: Identifiable {
+    enum Kind: String {
+        case noteOn, noteOff, pitchBend, controlChange, programChange, channelPressure, polyPressure
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let channel: Int
+    let data1: UInt8
+    let data2: UInt8
+    /// Time spent delivering CoreMIDI's callback onto the app's main queue.
+    let mainQueueLatencyMilliseconds: Double
+}
+
 enum MIDIInputMessage {
     case noteOn(channel: Int, note: UInt8, velocity: UInt8)
     case noteOff(channel: Int, note: UInt8)
@@ -14,6 +35,7 @@ enum MIDIInputMessage {
     case channelPressure(channel: Int, value: UInt8)
     case polyPressure(channel: Int, note: UInt8, value: UInt8)
     case controlChange(channel: Int, controller: UInt8, value: UInt8)
+    case programChange(channel: Int, program: UInt8)
     case effectButton(index: Int, enabled: Bool)
     case allNotesOff
 }
@@ -24,11 +46,14 @@ final class MIDIInputManager: ObservableObject {
 
     @Published private(set) var devices: [MIDIDeviceChoice] = []
     @Published private(set) var connectionStatus = "MIDI input is off"
+    @Published private(set) var activeNotes: [MIDIPressedNote] = []
+    @Published private(set) var lastActivityDescription = "Waiting for MIDI input"
     @Published var isEnabled = UserDefaults.standard.bool(forKey: "midiInputEnabled") {
         didSet {
             save("midiInputEnabled", isEnabled)
             if !isEnabled {
                 messages.send(.allNotesOff)
+                activeNotes.removeAll()
                 sustainChannels.removeAll()
                 deferredNoteOffs.removeAll()
             }
@@ -75,15 +100,49 @@ final class MIDIInputManager: ObservableObject {
     @Published var effectsCCEnabled = UserDefaults.standard.bool(forKey: "midiEffectsCCEnabled") {
         didSet { save("midiEffectsCCEnabled", effectsCCEnabled) }
     }
-    @Published var effectKnobCCs = UserDefaults.standard.array(forKey: "midiEffectKnobCCs") as? [Int] ?? [20, 21, 22, 23] {
+    @Published var effectKnobCCs = UserDefaults.standard.array(forKey: "midiEffectKnobCCs") as? [Int] ?? [-1, -1, -1, -1] {
         didSet { save("midiEffectKnobCCs", effectKnobCCs) }
     }
-    @Published var effectButtonCCs = UserDefaults.standard.array(forKey: "midiEffectButtonCCs") as? [Int] ?? [80, 81, 82, 83] {
+    @Published private(set) var effectKnobMinimums = UserDefaults.standard.array(forKey: "midiEffectKnobMinimums") as? [Int] ?? [0, 0, 0, 0] {
+        didSet { save("midiEffectKnobMinimums", effectKnobMinimums) }
+    }
+    @Published private(set) var effectKnobMaximums = UserDefaults.standard.array(forKey: "midiEffectKnobMaximums") as? [Int] ?? [127, 127, 127, 127] {
+        didSet { save("midiEffectKnobMaximums", effectKnobMaximums) }
+    }
+    @Published var effectButtonCCs = UserDefaults.standard.array(forKey: "midiEffectButtonCCs") as? [Int] ?? [-1, -1, -1, -1] {
         didSet { save("midiEffectButtonCCs", effectButtonCCs) }
     }
+    @Published var effectButtonProgramNumbers = UserDefaults.standard.array(forKey: "midiEffectButtonPrograms") as? [Int] ?? [-1, -1, -1, -1] {
+        didSet { save("midiEffectButtonPrograms", effectButtonProgramNumbers) }
+    }
+    @Published private var toggledProgramButtons = [false, false, false, false]
+    @Published private(set) var modulationWheelMinimum = UserDefaults.standard.object(forKey: "midiModWheelMinimum") as? Int ?? 0 {
+        didSet { save("midiModWheelMinimum", modulationWheelMinimum) }
+    }
+    @Published private(set) var modulationWheelMaximum = UserDefaults.standard.object(forKey: "midiModWheelMaximum") as? Int ?? 127 {
+        didSet { save("midiModWheelMaximum", modulationWheelMaximum) }
+    }
+    @Published private(set) var pitchWheelMinimum = UserDefaults.standard.object(forKey: "midiPitchWheelMinimum") as? Int ?? 0 {
+        didSet { save("midiPitchWheelMinimum", pitchWheelMinimum) }
+    }
+    @Published private(set) var pitchWheelMaximum = UserDefaults.standard.object(forKey: "midiPitchWheelMaximum") as? Int ?? 16383 {
+        didSet { save("midiPitchWheelMaximum", pitchWheelMaximum) }
+    }
+    @Published private(set) var mappingWarning: String?
     @Published private(set) var learningEffectControl: (isButton: Bool, index: Int)?
 
     let messages = PassthroughSubject<MIDIInputMessage, Never>()
+    let activity = PassthroughSubject<MIDIActivityEvent, Never>()
+
+    var currentDeviceName: String {
+        if selectedDeviceID != 0 {
+            return devices.first(where: { $0.id == selectedDeviceID })?.name ?? "Device unavailable"
+        }
+        let names = devices.filter { connectedSources.contains(MIDIEndpointRef($0.id)) }.map(\.name)
+        if names.count == 1 { return names[0] }
+        if names.count > 1 { return names.joined(separator: ", ") }
+        return "No MIDI device connected"
+    }
 
     private var client = MIDIClientRef()
     private var inputPort = MIDIPortRef()
@@ -128,17 +187,96 @@ final class MIDIInputManager: ObservableObject {
     }
 
     func learnEffectControl(index: Int, isButton: Bool) {
+        mappingWarning = nil
         learningEffectControl = (isButton, index)
+    }
+
+    func saveModulationRange(minimum: Int, maximum: Int) {
+        guard maximum > minimum else { return }
+        modulationWheelMinimum = min(127, max(0, minimum))
+        modulationWheelMaximum = min(127, max(0, maximum))
+    }
+
+    func savePitchWheelRange(minimum: Int, maximum: Int) {
+        guard maximum > minimum else { return }
+        pitchWheelMinimum = min(16383, max(0, minimum))
+        pitchWheelMaximum = min(16383, max(0, maximum))
+    }
+
+    func normalizedPitchWheelValue(_ value: Int) -> Int {
+        let midpoint = 8192
+        if value < midpoint {
+            let range = midpoint - pitchWheelMinimum
+            guard range > 0 else { return value }
+            return midpoint - (midpoint - value) * midpoint / range
+        }
+        let range = pitchWheelMaximum - midpoint
+        guard range > 0 else { return value }
+        return midpoint + (value - midpoint) * (16383 - midpoint) / range
+    }
+
+    func resetTrainingCalibration() {
+        effectKnobCCs = Array(repeating: -1, count: 4)
+        effectKnobMinimums = Array(repeating: 0, count: 4)
+        effectKnobMaximums = Array(repeating: 127, count: 4)
+        effectButtonCCs = Array(repeating: -1, count: 4)
+        effectButtonProgramNumbers = Array(repeating: -1, count: 4)
+        modulationWheelMinimum = 0
+        modulationWheelMaximum = 127
+        pitchWheelMinimum = 0
+        pitchWheelMaximum = 16383
+        learningEffectControl = nil
+        mappingWarning = nil
+        effectsCCEnabled = false
+        toggledProgramButtons = Array(repeating: false, count: 4)
+    }
+
+    func normalizedModulationValue(_ value: UInt8) -> UInt8 {
+        let range = modulationWheelMaximum - modulationWheelMinimum
+        guard range > 0 else { return value }
+        let scaled = (Int(value) - modulationWheelMinimum) * 127 / range
+        return UInt8(min(127, max(0, scaled)))
     }
 
     func knobIndex(for controller: UInt8) -> Int? {
         effectKnobCCs.firstIndex(of: Int(controller))
     }
 
+    func normalizedKnobValue(index: Int, value: UInt8) -> UInt8 {
+        guard effectKnobMinimums.indices.contains(index), effectKnobMaximums.indices.contains(index) else { return value }
+        let lower = effectKnobMinimums[index]
+        let upper = effectKnobMaximums[index]
+        guard upper > lower else { return value }
+        let normalized = (Int(value) - lower) * 127 / (upper - lower)
+        return UInt8(min(127, max(0, normalized)))
+    }
+
+    func saveKnobRange(index: Int, minimum: Int, maximum: Int) {
+        guard (0..<4).contains(index), maximum > minimum else { return }
+        var minimums = effectKnobMinimums
+        var maximums = effectKnobMaximums
+        minimums[index] = min(127, max(0, minimum))
+        maximums[index] = min(127, max(0, maximum))
+        guard maximums[index] > minimums[index] else { return }
+        effectKnobMinimums = minimums
+        effectKnobMaximums = maximums
+    }
+
+    func resetEffectMappings() {
+        effectKnobCCs = [-1, -1, -1, -1]
+        effectKnobMinimums = [0, 0, 0, 0]
+        effectKnobMaximums = [127, 127, 127, 127]
+        effectButtonCCs = [-1, -1, -1, -1]
+        effectButtonProgramNumbers = [-1, -1, -1, -1]
+        toggledProgramButtons = [false, false, false, false]
+        learningEffectControl = nil
+    }
+
     private func updateConnections() {
         guard client != 0, inputPort != 0 else { return }
         if !connectedSources.isEmpty {
             messages.send(.allNotesOff)
+            activeNotes.removeAll()
             sustainChannels.removeAll()
             deferredNoteOffs.removeAll()
         }
@@ -180,24 +318,107 @@ final class MIDIInputManager: ObservableObject {
             guard index + messageLength <= bytes.count else { break }
             let first = bytes[index + 1]
             let second = messageLength == 3 ? bytes[index + 2] : 0
+            let queuedAt = ProcessInfo.processInfo.systemUptime
             DispatchQueue.main.async { [weak self] in
-                self?.handle(kind: kind, channel: channelNumber, first: first, second: second)
+                let queueDelay = max(0, (ProcessInfo.processInfo.systemUptime - queuedAt) * 1_000)
+                self?.handle(kind: kind, channel: channelNumber, first: first, second: second,
+                             mainQueueLatencyMilliseconds: queueDelay)
             }
             index += messageLength
         }
     }
 
-    private func handle(kind: UInt8, channel: Int, first: UInt8, second: UInt8) {
+    private func handle(kind: UInt8, channel: Int, first: UInt8, second: UInt8,
+                        mainQueueLatencyMilliseconds: Double) {
         guard self.channel == 0 || self.channel == channel else { return }
+        let activityKind: MIDIActivityEvent.Kind
+        switch kind {
+        case 0x80: activityKind = .noteOff
+        case 0x90: activityKind = second == 0 ? .noteOff : .noteOn
+        case 0xA0: activityKind = .polyPressure
+        case 0xB0: activityKind = .controlChange
+        case 0xC0: activityKind = .programChange
+        case 0xD0: activityKind = .channelPressure
+        case 0xE0: activityKind = .pitchBend
+        default: return
+        }
+
+        var learnedControl = false
+        if kind == 0xC0, let learning = learningEffectControl, learning.isButton {
+            if let existing = effectButtonProgramNumbers.firstIndex(of: Int(first)), existing != learning.index {
+                mappingWarning = "That program is already assigned to Button \(existing + 1). Choose a different button control."
+            } else {
+                var programs = effectButtonProgramNumbers
+                var controllers = effectButtonCCs
+                programs[learning.index] = Int(first)
+                controllers[learning.index] = -1
+                effectButtonProgramNumbers = programs
+                effectButtonCCs = controllers
+                learningEffectControl = nil
+                mappingWarning = nil
+                learnedControl = true
+            }
+        }
+        if kind == 0xB0, let learning = learningEffectControl {
+            let existingKnob = effectKnobCCs.firstIndex(of: Int(first))
+            let existingButton = effectButtonCCs.firstIndex(of: Int(first))
+            let conflictsWithKnob = existingKnob.map { !learning.isButton || $0 != learning.index } ?? false
+            let conflictsWithButton = existingButton.map { !learning.isButton || $0 != learning.index } ?? false
+            let alreadyAssignedElsewhere = conflictsWithKnob || conflictsWithButton
+            if alreadyAssignedElsewhere {
+                let role: String
+                if let index = existingKnob { role = "Knob \(index + 1)" }
+                else if let index = existingButton { role = "Button \(index + 1)" }
+                else { role = "another control" }
+                mappingWarning = "That control is already assigned to \(role). Move a different control."
+            } else if learning.isButton {
+                var updated = effectButtonCCs
+                var programs = effectButtonProgramNumbers
+                updated[learning.index] = Int(first)
+                programs[learning.index] = -1
+                effectButtonCCs = updated
+                effectButtonProgramNumbers = programs
+                learningEffectControl = nil
+                mappingWarning = nil
+                learnedControl = true
+            } else {
+                var updated = effectKnobCCs
+                if updated[learning.index] != Int(first) {
+                    var minimums = effectKnobMinimums
+                    var maximums = effectKnobMaximums
+                    minimums[learning.index] = 0
+                    maximums[learning.index] = 127
+                    effectKnobMinimums = minimums
+                    effectKnobMaximums = maximums
+                }
+                updated[learning.index] = Int(first)
+                effectKnobCCs = updated
+                learningEffectControl = nil
+                mappingWarning = nil
+                learnedControl = true
+            }
+        }
+
+        activity.send(MIDIActivityEvent(kind: activityKind, channel: channel, data1: first,
+                                        data2: second,
+                                        mainQueueLatencyMilliseconds: mainQueueLatencyMilliseconds))
+        lastActivityDescription = activityDescription(kind: activityKind, first: first, second: second)
         switch kind {
         case 0x80:
+            removeActiveNote(channel: channel, note: first)
             emitNoteOff(channel: channel, note: first)
         case 0x90:
-            if second == 0 { emitNoteOff(channel: channel, note: first) }
-            else { messages.send(.noteOn(channel: channel, note: first, velocity: second)) }
+            if second == 0 {
+                removeActiveNote(channel: channel, note: first)
+                emitNoteOff(channel: channel, note: first)
+            } else {
+                updateActiveNote(channel: channel, note: first, velocity: second)
+                messages.send(.noteOn(channel: channel, note: first, velocity: second))
+            }
         case 0xB0:
             if first == 120 || first == 123 {
                 messages.send(.allNotesOff)
+                activeNotes.removeAll()
                 deferredNoteOffs[channel] = nil
                 sustainChannels.remove(channel)
                 return
@@ -211,19 +432,7 @@ final class MIDIInputManager: ObservableObject {
                     }
                 }
             }
-            if let learning = learningEffectControl {
-                if learning.isButton {
-                    var updated = effectButtonCCs
-                    updated[learning.index] = Int(first)
-                    effectButtonCCs = updated
-                } else {
-                    var updated = effectKnobCCs
-                    updated[learning.index] = Int(first)
-                    effectKnobCCs = updated
-                }
-                learningEffectControl = nil
-                return
-            }
+            if learnedControl { return }
             if let buttonIndex = effectButtonCCs.firstIndex(of: Int(first)) {
                 messages.send(.effectButton(index: buttonIndex, enabled: second >= 64))
             }
@@ -234,8 +443,53 @@ final class MIDIInputManager: ObservableObject {
             messages.send(.polyPressure(channel: channel, note: first, value: second))
         case 0xD0:
             messages.send(.channelPressure(channel: channel, value: first))
+        case 0xC0:
+            if learnedControl { return }
+            if let buttonIndex = effectButtonProgramNumbers.firstIndex(of: Int(first)) {
+                toggledProgramButtons[buttonIndex].toggle()
+                messages.send(.effectButton(index: buttonIndex, enabled: toggledProgramButtons[buttonIndex]))
+            }
+            messages.send(.programChange(channel: channel, program: first))
         default:
             break
+        }
+    }
+
+    private func updateActiveNote(channel: Int, note: UInt8, velocity: UInt8) {
+        let pressed = MIDIPressedNote(channel: channel, note: note, velocity: velocity)
+        if let index = activeNotes.firstIndex(where: { $0.id == pressed.id }) {
+            activeNotes[index] = pressed
+        } else {
+            activeNotes.append(pressed)
+        }
+    }
+
+    private func removeActiveNote(channel: Int, note: UInt8) {
+        activeNotes.removeAll { $0.channel == channel && $0.note == note }
+    }
+
+    private func activityDescription(kind: MIDIActivityEvent.Kind, first: UInt8, second: UInt8) -> String {
+        switch kind {
+        case .noteOn: return "Key \(first) · velocity \(second)"
+        case .noteOff: return "Key \(first) released"
+        case .pitchBend: return "Pitch bend · \(Int(first) | (Int(second) << 7))"
+        case .controlChange:
+            if let index = effectKnobCCs.firstIndex(of: Int(first)) {
+                return "Knob \(index + 1) - Value \(second)"
+            }
+            if let index = effectButtonCCs.firstIndex(of: Int(first)) {
+                return "Button \(index + 1) - Value \(second)"
+            }
+            if first == 1 { return "Mod Wheel - Value \(second)" }
+            if first == 64 { return "Sustain Pedal - Value \(second)" }
+            return "CC \(first) - Value \(second)"
+        case .programChange:
+            if let index = effectButtonProgramNumbers.firstIndex(of: Int(first)) {
+                return "Button \(index + 1) - Program \(first)"
+            }
+            return "Program \(first)"
+        case .channelPressure: return "Aftertouch · \(first)"
+        case .polyPressure: return "Key pressure · \(second)"
         }
     }
 

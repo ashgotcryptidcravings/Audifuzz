@@ -12,7 +12,7 @@ struct ContentView: View {
     @AppStorage("audifuzzWhatsNewVersion") private var whatsNewVersion = ""
     @State private var showWhatsNew = false
 
-    private let currentWhatsNewVersion = "2026.09.24.4"
+    private let currentWhatsNewVersion = "2026.09.24.5"
     private let destinations: [(title: String, symbol: String)] = [
         ("Editor", "slider.horizontal.3"),
         ("SynthSpace", "waveform"),
@@ -49,7 +49,9 @@ struct ContentView: View {
                         selection = 0
                     }, onBack: { selectedLibraryURL = nil }, selectedURL: $selectedLibraryURL)
                 case 6:
-                    PreferencesView(midi: midi)
+                    PreferencesView(midi: midi, lab: lab)
+                case 7:
+                    MIDIStatusView(midi: midi, lab: lab)
                 default:
                     EditorView(manager: manager)
                 }
@@ -58,7 +60,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 620, minHeight: 500)
 #if os(macOS)
-        .touchBar {
+        .background(
             TouchBarControls(
                 manager: manager,
                 lab: lab,
@@ -69,8 +71,8 @@ struct ContentView: View {
                 selectedSpatialLocationID: $selectedSpatialLocationID,
                 selectedLibraryURL: $selectedLibraryURL,
                 addSelectedSample: addSelectedLibrarySample
-            )
-        }
+            ).frame(width: 1, height: 1)
+        )
 #endif
         .toolbar {
 #if os(macOS)
@@ -86,31 +88,51 @@ struct ContentView: View {
             switch message {
             case let .noteOn(channel, note, velocity):
                 lab.receiveMIDINoteOn(channel: channel, note: note, velocity: velocity,
-                                      mode: midi.mode, selectedInstrument: midi.selectedInstrument,
+                                      mode: selection == 7 ? 0 : midi.mode,
+                                      selectedInstrument: midi.selectedInstrument,
                                       velocityEnabled: midi.velocityControlsVolume)
             case let .noteOff(channel, note):
                 lab.receiveMIDINoteOff(channel: channel, note: note)
-            case let .pitchBend(_, value):
-                lab.receiveMIDIPitchBend(value: value, rangeInSemitones: midi.pitchBendRange)
+            case let .pitchBend(channel, value):
+                lab.receiveMIDIPitchBend(channel: channel, value: midi.normalizedPitchWheelValue(value),
+                                         rangeInSemitones: midi.pitchBendRange)
             case let .channelPressure(channel, value):
                 lab.receiveMIDIChannelPressure(channel: channel, value: value)
             case let .polyPressure(channel, note, value):
                 lab.receiveMIDIPolyPressure(channel: channel, note: note, value: value)
-            case let .controlChange(_, controller, value):
-                if controller == 1 { lab.receiveMIDIModulation(value: value) }
+            case let .controlChange(channel, controller, value):
+                if controller == 1 {
+                    lab.receiveMIDIModulation(channel: channel,
+                                              value: midi.normalizedModulationValue(value))
+                }
                 if midi.effectsCCEnabled, let index = midi.knobIndex(for: controller) {
-                    manager.receiveMIDIControlChange(parameterIndex: index, value: value)
+                    manager.receiveMIDIControlChange(parameterIndex: index,
+                                                     value: midi.normalizedKnobValue(index: index, value: value))
                 }
             case let .effectButton(index, enabled):
                 if midi.effectsCCEnabled { manager.receiveMIDIEffectButton(index: index, enabled: enabled) }
             case .allNotesOff:
                 lab.receiveMIDIAllNotesOff()
+            case .programChange:
+                break
             }
+        }
+        .onReceive(midi.$selectedInstrument.dropFirst()) { instrumentIndex in
+            lab.selectMIDIInstrument(instrumentIndex)
+        }
+        .onReceive(midi.$isEnabled.dropFirst()) { enabled in
+            if !enabled { lab.stopPreview() }
         }
         .sheet(isPresented: $showWhatsNew, onDismiss: {
             whatsNewVersion = currentWhatsNewVersion
         }) {
             WhatsNewView { showWhatsNew = false }
+        }
+        .onChange(of: selection) { newSelection in
+            guard newSelection == 7 else { return }
+            if manager.isPlaying { manager.stop() }
+            if manager.isMicLive { manager.stopMic() }
+            lab.stopPreview()
         }
     }
 
@@ -123,6 +145,7 @@ struct ContentView: View {
             navigationButton(index: 6, title: "Settings", symbol: "gearshape")
 #endif
             navigationButton(index: 5, title: "Sound Library", symbol: "books.vertical")
+            navigationButton(index: 7, title: "MIDI", symbol: "pianokeys")
         }
     }
 

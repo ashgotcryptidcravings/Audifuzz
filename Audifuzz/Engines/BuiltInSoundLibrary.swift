@@ -29,7 +29,7 @@ enum BuiltInSoundLibrary {
     private static let sampleRate = 44100
     private static let duration = 3
 
-    static let names = ["Starter Pulse.wav", "Starter Drone.wav", "Starter Texture.wav"]
+    static let names = ["Audifuzz Siren.wav", "Audifuzz 505.wav", "Audifuzz WahWhine.wav"]
     static let placeholderNames = (1...10).map { String(format: "Starter Slot %02d.wav", $0) }
 
     static var entries: [Entry] {

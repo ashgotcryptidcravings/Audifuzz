@@ -27,7 +27,8 @@ Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - Prefer Apple's built-in `AVAudioUnit*` effects. Write custom DSP only when a built-in can't do the job.
 - **All effect connections live in `AudioEngineManager.rebuildChain()`.** Don't connect nodes anywhere else.
 - **The microphone runs in its own `AVAudioEngine` (`micEngine`) and is fed to the output engine through `micPlayer`.** Never touch `inputNode` on the output engine: on macOS, mixing live input and output in one engine crashes with `isInputConnToConverter`.
-- `MIDIInputManager` is shared by the app window and the macOS Settings scene. CoreMIDI callbacks dispatch parsed messages to the main queue before changing observable settings, instruments, or effect parameters.
+- `MIDIInputManager` is shared by the app window and the macOS Settings scene. CoreMIDI callbacks dispatch parsed messages to the main queue before changing observable settings, instruments, or effect parameters. Knob and button identifiers are unassigned until learned in the MIDI Trainer; CC and Program Change identifiers cannot be mapped to more than one named control. Trainer-calibrated knob and modulation-wheel ranges scale their full physical travel to 0–127.
+- MIDI note playback uses selectable presets from bundled `PreBundledAudio/Synths.sf2` and `BrightPiano.sf2` banks (`AVAudioUnitSampler`); the MIDI and Preferences pickers share this catalog. macOS General MIDI DLS and then `SynthRenderer` are fallbacks when a bundled bank cannot load.
 - The Editor's output engine stays running after a file loads and the file is pre-scheduled (`armFile()`), so Play is instant. Keep it that way. File opening happens off the main thread and sets `isLoading`, which the UI shows as "Loading file…".
 - The spatializer needs a mono input, so `SpatialStage.mixer` downmixes before `AVAudioEnvironmentNode`.
 - On iOS, set up `AVAudioSession` before starting an engine (`configureSession()`). The mic needs `.playAndRecord`.
@@ -83,6 +84,9 @@ Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - `Views/Oscilloscope3DView.swift`: interactive stereo-phase scope, with left/right amplitude and time on separate axes.
 - `Views/WhatsNewView.swift`: release highlights shown on app launch.
 - `Views/TouchBarControls.swift`: macOS page-aware playback and editing controls, hosted by `ContentView`.
+- `Views/MIDIStatusView.swift`: MIDI connection status, device capability summary, and live chord-color orb.
+- `Views/MIDITrainerView.swift`: guided controller input and app delivery timing trainer, including distinct-key octave-up/down verification and named knob/button assignment.
+- `Views/BenchmarkWizardView.swift`: guided live performance profiles with CPU, memory, waveform-gap telemetry, and Markdown export.
 
 ## Added effect files
 - `Effects/CompressorEffect.swift`: Apple Dynamics Processor wrapper.

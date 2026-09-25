@@ -9,6 +9,7 @@ Audifuzz/                            (repo root)
 ├── Audifuzz.xcodeproj
 └── Audifuzz/
     ├── AGENTS.md                    Rules for AI assistants
+    ├── TODO.md                      Self Explanatory
     ├── FILE_TREE.md                 This file
     ├── codemagic.yaml               Codemagic build config for iPhone
     ├── Audifuzz.entitlements        macOS sandbox permissions
@@ -16,12 +17,14 @@ Audifuzz/                            (repo root)
     ├── Persistence.swift            Xcode's stock Core Data controller
     ├── Audifuzz.xcdatamodeld/       Core Data model
     ├── Assets.xcassets/             App icon and accent color
-    ├── PreBundledMP3s/
-    │   └── DanganronpaIntro.mp3     Audio shipped inside the app
+    ├── PreBundledAudio/
+    │   ├── DanganronpaIntro.mp3     Audio shipped inside the app
+    │   ├── Synths.sf2               Bundled MIDI SoundFont with synth-waveform presets
+    │   └── BrightPiano.sf2          Bundled MIDI SoundFont with a Rhodes preset
     ├── Engines/
     │   ├── AudioEngineManager.swift Editor tab audio brain
     │   ├── MIDIInputManager.swift    Shared CoreMIDI input and settings
-    │   ├── SoundLabEngine.swift     Sound Lab audio brain, EQ, saving
+    │   ├── SoundLabEngine.swift     Sound Lab, MIDI sampler, EQ, saving
     │   ├── BuiltInSoundLibrary.swift Starter WAVs and the Sound Library entries
     │   ├── SampleStorage.swift      Where saved samples live
     │   └── Preset.swift             Save/load effect settings as JSON
@@ -48,6 +51,9 @@ Audifuzz/                            (repo root)
         ├── Oscilloscope3DView.swift Interactive stereo phase display in 3D
         ├── WhatsNewView.swift     Release highlights sheet
         ├── TouchBarControls.swift  Page-aware macOS Touch Bar controls
+        ├── MIDIStatusView.swift    MIDI status, controller capabilities, and chord-color orb
+        ├── MIDITrainerView.swift   Guided controller input and app handoff timing trainer
+        ├── BenchmarkWizardView.swift Guided audio benchmark and detailed Markdown export
         ├── SpatialCardView.swift    Spatializer page, Editor summary, and placement field
         ├── EffectCardView.swift     One effect card with dials
         ├── PreferencesView.swift    Audio, performance, device, and cache settings
@@ -69,7 +75,10 @@ Audifuzz/                            (repo root)
   - The **output engine** plays your file (or the mic feed) through the effect chain and out the speakers. The file is queued as soon as it loads, so Play is instant, and the screen shows "Loading file…" while it opens.
   - The **mic engine** only listens to the microphone. It copies each chunk of sound into the output engine, so the two never fight (this avoids the macOS crash).
   - It also handles reordering effects, Randomize, Reset, mic recording, and presets.
-- **MIDIInputManager.swift**: app-wide CoreMIDI source selection, channel filtering, sustain handling, pitch-bend settings, and MIDI message routing.
+- **MIDIInputManager.swift**: app-wide CoreMIDI source selection, channel filtering, sustain handling, pitch-bend settings, unique trainer-learned knob/button CC and Program Change mappings, and normalized modulation-wheel travel.
+- **SoundLabEngine.swift**: plays MIDI through selectable presets from bundled `Synths.sf2` and `BrightPiano.sf2`, falls back to Apple's General MIDI DLS bank on macOS, and then to the built-in oscillator.
+- **PreBundledAudio/Synths.sf2**: PureSynth Basic SoundFont by Nero; contains nine electronic waveform presets (Triangle, Square, Sawtooth, and variations), not an acoustic piano bank. Credit requested in the embedded SoundFont metadata.
+- **PreBundledAudio/BrightPiano.sf2**: contains the `Piano Rhodes` preset at bank 0, program 38.
 - **EffectModule.swift**: the template every effect follows. An effect has a name, an on/off switch, and a list of knobs (`EffectParameter`). Changing a knob calls `apply()`, which pushes the value into the real audio unit.
 - **SpatialStage.swift**: places one signal at up to four virtual locations through `AVAudioEnvironmentNode`'s device-aware spatial renderer, with direction, height, distance, and reverb.
 - **SampleStorage.swift**: creates file names and lists saved sounds in the app's `Documents/Samples` folder. Both mic recordings and Sound Lab saves go there.
@@ -98,11 +107,14 @@ Each file wraps one built-in Apple audio unit and maps its dials onto it.
 - **ContentView.swift**: top SF Symbol navigation buttons, a compact now-playing bar, and a "What's new" sheet. On macOS it also attaches the page-aware Touch Bar controls. It creates both audio brains and sends "Use in Editor" from SynthSpace to the Editor.
 - **EditorView.swift**: the main screen. File/Mic switch, Open/Play/Stop/Record buttons, and effect cards. Spatializer controls have their own page.
 - **SoundLibraryView.swift**: the Sound Library page. Installed items open their details (length, channels, bitrate, key, date added); reserved placeholders stay hidden. A separate preview control plays a short sample.
-- **PreferencesView.swift**: responsive settings tabs for sample rate, buffer size, audio devices (macOS), cache, performance, and MIDI input, including expandable V25 control mappings.
+- **PreferencesView.swift**: responsive settings tabs for sample rate, buffer size, audio devices (macOS), cache, performance, and MIDI input, with controller learning in the MIDI Trainer.
 - **OscilloscopeView.swift**: plots the Editor or SynthSpace's stereo output as waveform, interactive 3D stereo phase, or 2D Lissajous.
 - **Oscilloscope3DView.swift**: renders left amplitude, right amplitude, and time on separate 3D axes with a rotatable SceneKit camera.
 - **WhatsNewView.swift**: presents current release highlights in a separate launch sheet.
 - **TouchBarControls.swift**: provides playback controls throughout the Mac app and page-specific controls for Editor, SynthSpace, Spatializer, Equalizer, Oscilloscope, and a selected Sound Library file.
+- **MIDIStatusView.swift**: reports connection and device capabilities, and colors a central orb from active MIDI notes and chord tension.
+- **MIDITrainerView.swift**: guides key, velocity, hold, pitch bend, modulation range, pads, octave up/down verification, unique named knob/button assignment, sustain, and app handoff timing checks.
+- **BenchmarkWizardView.swift**: runs six sample-rate and buffer-size profiles while monitoring process CPU/RAM and held-note waveform gaps, then exports detailed Markdown telemetry. Per-app wattage is unavailable through macOS public APIs.
 - **SoundLabView.swift**: the Lab and Equalizer screens. The Lab contains instrument cards, selected-instrument controls, Save Sample, and the saved samples list. The Equalizer page reuses `EqualizerCardView` and the live graph.
 - **EffectCardView.swift**: one effect's card: on/off, move up/down, and a dial for each knob.
 - **SpatialCardView.swift**: the full Spatializer page, compact Editor summary, and `SpatialPadView`, a top-down field where you drag a dot to place the sound.
@@ -125,10 +137,12 @@ Mic feed ────┘
 Instrument 1 ─┐
 Instrument 2 ─┼─> SynthRenderer -> equalizer -> speakers
 Instrument N ─┘                        └─> Save Sample -> WAV in Samples folder
+MIDI keys ───────> selected bundled SF2 sampler -> equalizer
+                       └─> Apple DLS on macOS -> oscillator fallback
 ```
 "Use in Editor" loads a saved sample into the Editor tab.
 
-On macOS, `ContentView` supplies the active page to `TouchBarControls`. The selected SynthSpace instrument, spatial location, scope mode, and Sound Library file are shared with Touch Bar controls so they edit the same values as the page.
+On macOS, `ContentView` installs a native `NSTouchBar` through `TouchBarControls` on the hosting window. Playback and page-specific controls edit the same shared engine state as the page. The MIDI page and trainer use the shared `MIDIInputManager` owned by the app and Preferences scene.
 
 ## Adding a new effect
 1. Copy `DelayEffect.swift` to `Effects/YourEffect.swift` and change the audio unit, name, and knobs.

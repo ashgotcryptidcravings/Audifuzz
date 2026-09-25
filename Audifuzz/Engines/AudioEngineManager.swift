@@ -854,7 +854,7 @@ final class AudioEngineManager: ObservableObject {
         if shouldLoad { stopMic() }
         
         micLock.lock()
-        var fileToClose: AVAudioFile? = recordingFile
+        let fileToClose = recordingFile
         recordingFile = nil
         micLock.unlock()
         
@@ -862,7 +862,7 @@ final class AudioEngineManager: ObservableObject {
         recordingURL = nil
         
         // 3. EXPLICITLY KILL THE WRITER NOW. Do not let ARC wait for the function scope to end.
-        fileToClose = nil
+        withExtendedLifetime(fileToClose) {}
         
         print("[Recorder] SUCCESS: Recording finalized.")
         

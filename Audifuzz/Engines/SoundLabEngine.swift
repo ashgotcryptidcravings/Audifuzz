@@ -1,11 +1,33 @@
 import AVFoundation
+import AudioToolbox
 import SwiftUI
 
 private struct LabError: Error {}
 
 /// The Sound Lab: stacked waves -> 5-band equalizer -> speakers, plus saving to a file.
 final class SoundLabEngine: ObservableObject {
+    private struct MIDISoundFontPreset {
+        let name: String
+        let resource: String
+        let program: UInt8
+    }
+
+    // These entries mirror the actual preset headers in the bundled SF2 files.
+    private static let bundledMIDIPresets = [
+        MIDISoundFontPreset(name: "Triangle", resource: "Synths", program: 0),
+        MIDISoundFontPreset(name: "Square", resource: "Synths", program: 1),
+        MIDISoundFontPreset(name: "Sawtooth", resource: "Synths", program: 2),
+        MIDISoundFontPreset(name: "T-Square", resource: "Synths", program: 3),
+        MIDISoundFontPreset(name: "T-Sawtooth", resource: "Synths", program: 4),
+        MIDISoundFontPreset(name: "S-Triangle", resource: "Synths", program: 5),
+        MIDISoundFontPreset(name: "S-Sawtooth", resource: "Synths", program: 6),
+        MIDISoundFontPreset(name: "ST-Triangle", resource: "Synths", program: 7),
+        MIDISoundFontPreset(name: "ST-Square", resource: "Synths", program: 8),
+        MIDISoundFontPreset(name: "Piano Rhodes", resource: "BrightPiano", program: 38)
+    ]
+    static let bundledMIDIInstrumentOptions = bundledMIDIPresets.map(\.name)
     static let eqFrequencies: [Float] = [60, 250, 1000, 4000, 12000]
+    private var loadedMIDIPresetIndex: Int?
 
     @Published var voices: [Voice] = [Voice()] {
         didSet {
@@ -27,6 +49,7 @@ final class SoundLabEngine: ObservableObject {
     
     @Published private(set) var isPlaying = false
     @Published private(set) var isMIDIActive = false
+    @Published private(set) var midiUsesSampledInstrument = false
     @Published private(set) var isSaving = false
     @Published private(set) var waveform = Array(repeating: Float.zero, count: 128)
     @Published private(set) var waveformRight = Array(repeating: Float.zero, count: 128)
@@ -39,19 +62,29 @@ final class SoundLabEngine: ObservableObject {
     }
     @Published private(set) var samples: [URL] = []
 
+    var midiInstrumentOptions: [String] { SoundLabEngine.bundledMIDIInstrumentOptions }
+
     private let renderer = SynthRenderer()
     private var midiSlots: [Int: Int] = [:]
     private var nextMIDISlot = 0
+    private var midiIdleStopGeneration = 0
     private var isManualPreview = false
     private let engine = AVAudioEngine()
     private let eq = AVAudioUnitEQ(numberOfBands: SoundLabEngine.eqFrequencies.count)
+    private let midiSampler = AVAudioUnitSampler()
+    private let sourceMixer = AVAudioMixerNode()
     private var sourceNode: AVAudioSourceNode?
+    private var samplerNotes: [Int: [UInt8]] = [:]
+    private var samplerPitchBendRanges: [Int: Int] = [:]
+    private var samplerBankMSB: UInt8 = 0
+    private var samplerBankLSB: UInt8 = 0
 
     init() {
         print("[SoundLabEngine] Initializing Sound Lab engine...")
         renderer.update(voices)
         SoundLabEngine.configureEQ(eq, gains: eqGains)
         BuiltInSoundLibrary.install()
+        loadDefaultMIDIInstrument()
         refreshSamples()
         print("[SoundLabEngine] Initialization complete.")
     }
@@ -106,9 +139,9 @@ final class SoundLabEngine: ObservableObject {
 
     func receiveMIDINoteOn(channel: Int, note: UInt8, velocity: UInt8, mode: Int,
                            selectedInstrument: Int, velocityEnabled: Bool) {
+        midiIdleStopGeneration += 1
         isMIDIActive = true
         if !isManualPreview { renderer.setBaseVoicesMuted(true) }
-        if !isPlaying { startPreview() }
         let noteID = channel * 128 + Int(note)
         let slot: Int
         if let existing = midiSlots[noteID] {
@@ -134,6 +167,24 @@ final class SoundLabEngine: ObservableObject {
         } else {
             targetVoice = voices.firstIndex(where: \.enabled) ?? selectedInstrument
         }
+        if midiUsesSampledInstrument && mode == 0 {
+            let presetIndex = SoundLabEngine.bundledMIDIPresets.indices.contains(selectedInstrument) ? selectedInstrument : 0
+            guard loadMIDIPresetIfNeeded(presetIndex) else {
+                if !isPlaying { startPreview() }
+                renderer.startMIDINote(slot: slot, note: note, velocity: amplitude, selectedVoice: targetVoice)
+                return
+            }
+            if !isPlaying { startPreview() }
+            let midiChannel = UInt8(min(15, max(0, channel - 1)))
+            let requestedVelocity = velocityEnabled ? Int(velocity) : 100
+            let voiceVolume = voices.indices.contains(selectedInstrument) ? voices[selectedInstrument].volume : 0.6
+            let scaledVelocity = UInt8(max(1, min(127, Int(Float(requestedVelocity) * max(0.05, voiceVolume) / 0.6))))
+            midiSampler.startNote(note, withVelocity: scaledVelocity, onChannel: midiChannel)
+            samplerNotes[noteID] = [midiChannel]
+            midiSlots[noteID] = -1
+            return
+        }
+        if !isPlaying { startPreview() }
         renderer.startMIDINote(slot: slot, note: note, velocity: amplitude,
                                selectedVoice: targetVoice)
     }
@@ -141,35 +192,67 @@ final class SoundLabEngine: ObservableObject {
     func receiveMIDINoteOff(channel: Int, note: UInt8) {
         let noteID = channel * 128 + Int(note)
         guard let slot = midiSlots.removeValue(forKey: noteID) else { return }
-        renderer.stopMIDINote(slot: slot)
+        if slot >= 0 {
+            renderer.stopMIDINote(slot: slot)
+        } else {
+            for samplerChannel in samplerNotes.removeValue(forKey: noteID) ?? [] {
+                midiSampler.stopNote(note, onChannel: samplerChannel)
+            }
+        }
         updateMIDIActiveState()
     }
 
-    func receiveMIDIPitchBend(value: Int, rangeInSemitones: Int) {
+    func receiveMIDIPitchBend(channel: Int, value: Int, rangeInSemitones: Int) {
         let normalized = Float(value - 8192) / 8192
         let semitones = normalized * Float(rangeInSemitones)
         renderer.setMIDIPitchBend(powf(2, semitones / 12))
+        let samplerChannel = UInt8(min(15, max(0, channel - 1)))
+        if samplerPitchBendRanges[channel] != rangeInSemitones {
+            midiSampler.sendController(101, withValue: 0, onChannel: samplerChannel)
+            midiSampler.sendController(100, withValue: 0, onChannel: samplerChannel)
+            midiSampler.sendController(6, withValue: UInt8(min(127, max(0, rangeInSemitones))), onChannel: samplerChannel)
+            midiSampler.sendController(38, withValue: 0, onChannel: samplerChannel)
+            midiSampler.sendController(101, withValue: 127, onChannel: samplerChannel)
+            midiSampler.sendController(100, withValue: 127, onChannel: samplerChannel)
+            samplerPitchBendRanges[channel] = rangeInSemitones
+        }
+        midiSampler.sendPitchBend(UInt16(max(0, min(16383, value))), onChannel: samplerChannel)
     }
 
-    func receiveMIDIModulation(value: UInt8) {
+    func receiveMIDIModulation(channel: Int, value: UInt8) {
         renderer.setMIDIModulation(Float(value) / 127)
+        midiSampler.sendController(1, withValue: value, onChannel: UInt8(min(15, max(0, channel - 1))))
     }
 
     func receiveMIDIChannelPressure(channel: Int, value: UInt8) {
+        midiSampler.sendPressure(value, onChannel: UInt8(min(15, max(0, channel - 1))))
         for (noteID, slot) in midiSlots where noteID / 128 == channel {
-            renderer.setMIDIPressure(slot: slot, amount: Float(value) / 127)
+            if slot >= 0 { renderer.setMIDIPressure(slot: slot, amount: Float(value) / 127) }
         }
     }
 
     func receiveMIDIPolyPressure(channel: Int, note: UInt8, value: UInt8) {
         let noteID = channel * 128 + Int(note)
         guard let slot = midiSlots[noteID] else { return }
-        renderer.setMIDIPressure(slot: slot, amount: Float(value) / 127)
+        if slot >= 0 {
+            renderer.setMIDIPressure(slot: slot, amount: Float(value) / 127)
+        } else {
+            midiSampler.sendPressure(forKey: note, withValue: value,
+                                     onChannel: UInt8(min(15, max(0, channel - 1))))
+        }
     }
 
     func receiveMIDIAllNotesOff() {
         for noteID in Array(midiSlots.keys) {
-            if let slot = midiSlots.removeValue(forKey: noteID) { renderer.stopMIDINote(slot: slot) }
+            guard let slot = midiSlots.removeValue(forKey: noteID) else { continue }
+            if slot >= 0 {
+                renderer.stopMIDINote(slot: slot)
+            } else {
+                let note = UInt8(noteID % 128)
+                for channel in samplerNotes.removeValue(forKey: noteID) ?? [] {
+                    midiSampler.stopNote(note, onChannel: channel)
+                }
+            }
         }
         updateMIDIActiveState()
     }
@@ -182,8 +265,13 @@ final class SoundLabEngine: ObservableObject {
     private func updateMIDIActiveState() {
         isMIDIActive = !midiSlots.isEmpty
         if !isMIDIActive && !isManualPreview {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) { [weak self] in
-                guard let self, !self.isMIDIActive, !self.isManualPreview else { return }
+            // Keep the sampler warm between notes; rebuilding the graph after each release adds latency.
+            let generation = midiIdleStopGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+                guard let self,
+                      generation == self.midiIdleStopGeneration,
+                      !self.isMIDIActive,
+                      !self.isManualPreview else { return }
                 self.stopPreview()
             }
         }
@@ -197,10 +285,14 @@ final class SoundLabEngine: ObservableObject {
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
         let node = renderer.makeSourceNode(sampleRate: sampleRate)
         engine.attach(node)
+        engine.attach(midiSampler)
+        engine.attach(sourceMixer)
         engine.attach(eq)
-        engine.connect(node, to: eq, format: format)
+        engine.connect(node, to: sourceMixer, format: format)
+        engine.connect(midiSampler, to: sourceMixer, format: format)
+        engine.connect(sourceMixer, to: eq, format: format)
         engine.connect(eq, to: engine.mainMixerNode, format: format)
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 256, format: format) { [weak self] buffer, _ in
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.captureWaveform(from: buffer)
         }
         sourceNode = node
@@ -220,6 +312,7 @@ final class SoundLabEngine: ObservableObject {
         
         buildGraphIfNeeded()
         do {
+            engine.prepare()
             try engine.start()
             isPlaying = true
             print("[SoundLabEngine] SUCCESS: Live synth preview started.")
@@ -229,12 +322,87 @@ final class SoundLabEngine: ObservableObject {
         }
     }
 
+    private func loadDefaultMIDIInstrument() {
+        midiSampler.volume = 0.32
+        let preferredIndex = UserDefaults.standard.integer(forKey: "midiSelectedInstrument")
+        if loadMIDIPresetIfNeeded(preferredIndex) || (preferredIndex != 0 && loadMIDIPresetIfNeeded(0)) { return }
+#if os(macOS)
+        let bankURL = URL(fileURLWithPath: "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls")
+        guard FileManager.default.fileExists(atPath: bankURL.path) else {
+            print("[MIDI] Apple General MIDI bank was not found; using the built-in oscillator fallback.")
+            return
+        }
+        do {
+            samplerBankMSB = UInt8(kAUSampler_DefaultMelodicBankMSB)
+            samplerBankLSB = UInt8(kAUSampler_DefaultBankLSB)
+            try midiSampler.loadSoundBankInstrument(at: bankURL, program: 0,
+                                                    bankMSB: samplerBankMSB,
+                                                    bankLSB: UInt8(kAUSampler_DefaultBankLSB))
+            // Leave headroom for sampled attacks and summed notes to reduce harsh peaks.
+            midiSampler.volume = 0.55
+            midiUsesSampledInstrument = true
+            print("[MIDI] Loaded Apple General MIDI instruments from the system DLS bank.")
+        } catch {
+            print("[MIDI] Could not load the Apple General MIDI bank: \(error.localizedDescription)")
+        }
+#endif
+    }
+
+    private func loadMIDIPresetIfNeeded(_ index: Int) -> Bool {
+        guard SoundLabEngine.bundledMIDIPresets.indices.contains(index) else { return false }
+        if loadedMIDIPresetIndex == index { return true }
+        let preset = SoundLabEngine.bundledMIDIPresets[index]
+        guard let bankURL = Bundle.main.url(forResource: preset.resource, withExtension: "sf2") else {
+            print("[MIDI] Bundled SoundFont \(preset.resource).sf2 is missing.")
+            return false
+        }
+        do {
+            try midiSampler.loadSoundBankInstrument(at: bankURL,
+                                                    program: preset.program,
+                                                    bankMSB: UInt8(kAUSampler_DefaultMelodicBankMSB),
+                                                    bankLSB: UInt8(kAUSampler_DefaultBankLSB))
+            loadedMIDIPresetIndex = index
+            samplerBankMSB = UInt8(kAUSampler_DefaultMelodicBankMSB)
+            samplerBankLSB = UInt8(kAUSampler_DefaultBankLSB)
+            midiUsesSampledInstrument = true
+            return true
+        } catch {
+            print("[MIDI] Could not load \(preset.name) from \(preset.resource).sf2: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func selectMIDIInstrument(_ index: Int) {
+        guard !isMIDIActive else { return }
+        guard !loadMIDIPresetIfNeeded(index) else { return }
+        statusMessage = "Couldn't load \(midiInstrumentOptions.indices.contains(index) ? midiInstrumentOptions[index] : "MIDI instrument"). Check the bundled SoundFont."
+    }
+
+    func midiInstrumentName(for instrumentIndex: Int) -> String {
+        guard midiUsesSampledInstrument, SoundLabEngine.bundledMIDIInstrumentOptions.indices.contains(instrumentIndex) else {
+            return "SynthSpace oscillator"
+        }
+        return SoundLabEngine.bundledMIDIInstrumentOptions[instrumentIndex]
+    }
+
     func stopPreview() {
         isManualPreview = false
-        for slot in midiSlots.values { renderer.stopMIDINote(slot: slot) }
+        for (noteID, slot) in midiSlots {
+            if slot >= 0 {
+                renderer.stopMIDINote(slot: slot)
+            } else {
+                let note = UInt8(noteID % 128)
+                for channel in samplerNotes[noteID] ?? [] {
+                    midiSampler.stopNote(note, onChannel: channel)
+                }
+            }
+        }
         midiSlots.removeAll()
+        samplerNotes.removeAll()
         isMIDIActive = false
         renderer.setBaseVoicesMuted(false)
+        renderer.setMIDIPitchBend(1)
+        renderer.setMIDIModulation(0)
         guard isPlaying else { return }
         engine.stop()
         isPlaying = false

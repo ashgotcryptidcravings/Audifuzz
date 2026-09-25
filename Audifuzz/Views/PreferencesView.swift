@@ -7,6 +7,7 @@ import CoreAudio
 
 struct PreferencesView: View {
     @ObservedObject var midi: MIDIInputManager = .shared
+    @ObservedObject var lab: SoundLabEngine = SoundLabEngine()
     // Standard AppStorage properties persist directly to UserDefaults
     @AppStorage("defaultSampleRate") private var defaultSampleRate: Double = 44100.0
     @AppStorage("bufferSize") private var bufferSize: Int = 512
@@ -22,7 +23,9 @@ struct PreferencesView: View {
     
     // Local state for UI feedback
     @State private var cacheCleared = false
-    @State private var showMIDIMappings = false
+    @State private var showMIDITrainer = false
+    @State private var showResetTrainingConfirmation = false
+    @State private var showBenchmarkWizard = false
 #if os(macOS)
     @State private var inputDevices: [AudioDeviceChoice] = []
     @State private var outputDevices: [AudioDeviceChoice] = []
@@ -184,6 +187,17 @@ struct PreferencesView: View {
 
             Form {
                 Section(header: Text("Performance")) {
+                    #if os(macOS)
+                    Button {
+                        showBenchmarkWizard = true
+                    } label: {
+                        Label("Open Performance Benchmark Wizard", systemImage: "chart.xyaxis.line")
+                    }
+                    Text("Compare live audio behavior across sample-rate and buffer-size combinations, then export a detailed Markdown report.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    #endif
+
                     Toggle("Safe Mode / Dropout Protection", isOn: Binding(
                         get: { safeMode },
                         set: { value in
@@ -243,6 +257,18 @@ struct PreferencesView: View {
                         Button("Refresh") { midi.refreshDevices() }
                     }
 
+                    HStack {
+                        Button {
+                            showMIDITrainer = true
+                        } label: {
+                            Label("Open MIDI Controller Trainer", systemImage: "graduationcap")
+                        }
+                        Spacer()
+                        Button("Reset Training…", role: .destructive) {
+                            showResetTrainingConfirmation = true
+                        }
+                    }
+
                     Picker("MIDI Channel", selection: $midi.channel) {
                         Text("Omni (All Channels)").tag(0)
                         ForEach(1...16, id: \.self) { channel in
@@ -256,9 +282,9 @@ struct PreferencesView: View {
                     }
 
                     if midi.mode == 0 {
-                        Picker("Selected Instrument", selection: $midi.selectedInstrument) {
-                            ForEach(0..<SynthRenderer.maxVoices, id: \.self) { index in
-                                Text("Instrument \(index + 1)").tag(index)
+                        Picker("SoundFont Preset", selection: $midi.selectedInstrument) {
+                            ForEach(Array(SoundLabEngine.bundledMIDIInstrumentOptions.enumerated()), id: \.offset) { index, name in
+                                Text(name).tag(index)
                             }
                         }
                     }
@@ -283,36 +309,10 @@ struct PreferencesView: View {
                         .foregroundColor(.secondary)
 
                     Toggle("MIDI → Effects (CC Mapping)", isOn: $midi.effectsCCEnabled)
-                    Text("Learn the V25's assignable knobs to control the first four Editor dials, and buttons to toggle the first four effects.")
+                    Text("Use the MIDI Controller Trainer to learn knob travel ranges and assignable buttons. Knobs control the first four Editor dials; buttons toggle the first four effects.")
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    DisclosureGroup("Alesis V25 Knob & Button Mapping", isExpanded: $showMIDIMappings) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(0..<4, id: \.self) { index in
-                                HStack {
-                                    Text("Knob \(index + 1) · CC \(midi.effectKnobCCs[index])")
-                                        .font(.subheadline)
-                                    Spacer()
-                                    Button(midi.learningEffectControl?.isButton == false && midi.learningEffectControl?.index == index ? "Move a knob…" : "Learn") {
-                                        midi.learnEffectControl(index: index, isButton: false)
-                                    }
-                                }
-                            }
-                            Divider()
-                            ForEach(0..<4, id: \.self) { index in
-                                HStack {
-                                    Text("Button \(index + 1) · CC \(midi.effectButtonCCs[index])")
-                                        .font(.subheadline)
-                                    Spacer()
-                                    Button(midi.learningEffectControl?.isButton == true && midi.learningEffectControl?.index == index ? "Press a button…" : "Learn") {
-                                        midi.learnEffectControl(index: index, isButton: true)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.top, 6)
-                    }
                 }
             }
             .padding(20)
@@ -322,6 +322,25 @@ struct PreferencesView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(isPresented: $showMIDITrainer) {
+            MIDITrainerView(midi: midi)
+        }
+        #if os(macOS)
+        .sheet(isPresented: $showBenchmarkWizard) {
+            BenchmarkWizardView(midi: midi, lab: lab, sampleRate: $defaultSampleRate,
+                                bufferSize: $bufferSize, safeMode: $safeMode,
+                                resamplingQuality: $resamplingQuality)
+        }
+        #endif
+        .confirmationDialog("Reset MIDI Training?", isPresented: $showResetTrainingConfirmation,
+                            titleVisibility: .visible) {
+            Button("Reset Training Data", role: .destructive) {
+                midi.resetTrainingCalibration()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This clears learned knob and button assignments and resets the bend and modulation wheel ranges, so you can train the controller again. It won’t change your device or audio settings.")
+        }
 #if os(macOS)
         .frame(minWidth: 680, idealWidth: 820, maxWidth: .infinity,
                minHeight: 560, idealHeight: 680, maxHeight: .infinity)
@@ -382,8 +401,7 @@ struct PreferencesView: View {
         midi.pitchBendRange = 2
         midi.sustainPedalEnabled = true
         midi.effectsCCEnabled = false
-        midi.effectKnobCCs = [20, 21, 22, 23]
-        midi.effectButtonCCs = [80, 81, 82, 83]
+        midi.resetEffectMappings()
         setPreference("all")
         print("[Preferences] SUCCESS: All preferences restored to default state.")
     }
@@ -509,6 +527,6 @@ private struct AudioDeviceChoice: Identifiable, Hashable {
 // Xcode Canvas Preview setup
 struct PreferencesView_Previews: PreviewProvider {
     static var previews: some View {
-        PreferencesView(midi: MIDIInputManager())
+        PreferencesView(midi: MIDIInputManager(), lab: SoundLabEngine())
     }
 }

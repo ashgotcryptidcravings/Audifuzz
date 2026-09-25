@@ -13,9 +13,9 @@ struct WhatsNewView: View {
                     .background(Color.accentColor.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 20))
 
-                Text("Here's what's new!")
+                Text("Welcome to a new Audifuzz")
                     .font(.largeTitle.bold())
-                Text("A faster, clearer way to shape and explore sound.")
+                Text("It's like a baby DAW, Check it out!")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -28,17 +28,17 @@ struct WhatsNewView: View {
                     highlight(
                         icon: "pianokeys",
                         title: "App-Wide MIDI Input",
-                        detail: "Connect a MIDI keyboard, choose its source and channel, play SynthSpace voices, shape pitch and sustain, and map controller knobs to Editor effects."
+                        detail: "Connect a MIDI keyboard, choose its source and channel, and map controller knobs to Editor effects."
                     )
                     highlight(
                         icon: "waveform.path",
                         title: "Live Oscilloscope",
-                        detail: "Watch the Editor's processed output with a smooth, display-synchronized waveform."
+                        detail: "Watching lines for tons of time, woah."
                     )
                     highlight(
                         icon: "dot.radiowaves.left.and.right",
-                        title: "Native Spatial Audio",
-                        detail: "Place up to four virtual sound sources in Apple's device-aware 3D renderer. Height and reverb controls snap to marked values."
+                        title: "Spatial Audio",
+                        detail: "Place up to four virtual sound sources in a 3D renderer."
                     )
                     highlight(
                         icon: "speedometer",
@@ -52,14 +52,14 @@ struct WhatsNewView: View {
                     )
                     highlight(
                         icon: "books.vertical",
-                        title: "Sound Library Details",
-                        detail: "Click an item's row to open its details; use the separate play button to preview it."
+                        title: "Sound Library",
+                        detail: "The app comes with a few starter sounds!"
                     )
                 }
                 .padding(28)
             }
 
-            Button("Start exploring", action: onDone)
+            Button("Cool!", action: onDone)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .padding(.bottom, 24)
