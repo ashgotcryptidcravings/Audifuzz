@@ -23,6 +23,11 @@ struct SpatialCardView: View {
 
 struct SpatializerView: View {
     @ObservedObject var stage: SpatialStage
+    @Binding var selectedLocationID: UUID?
+
+    private var selectedLocation: SpatialLocation {
+        stage.locations.first(where: { $0.id == selectedLocationID }) ?? stage.locations[0]
+    }
 
     var body: some View {
         ScrollView {
@@ -45,7 +50,7 @@ struct SpatializerView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Spatializer").font(.largeTitle.bold())
-                Text("Place your sound around the listener with headphone-ready 3D audio.")
+                Text("Place sources in 3D using Apple’s device-aware spatial audio renderer.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -57,30 +62,55 @@ struct SpatializerView: View {
     }
 
     private var spatialField: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Sound field").font(.headline)
-                Spacer()
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Sound field").font(.headline)
+                        Spacer()
                 Text(stage.isEnabled ? "LIVE" : "BYPASSED")
                     .font(.caption.weight(.bold))
-                    .foregroundColor(stage.isEnabled ? .accentColor : .secondary)
-            }
+                            .foregroundColor(stage.isEnabled ? .accentColor : .secondary)
+                    }
 
-            HStack(alignment: .center, spacing: 22) {
-                SpatialPadView(azimuth: $stage.azimuth, distance: $stage.distance)
+                    HStack(spacing: 8) {
+                        ForEach(Array(stage.locations.enumerated()), id: \.element.id) { index, location in
+                            Button("Source \(index + 1)") { selectedLocationID = location.id }
+                                .buttonStyle(.bordered)
+                                .tint(selectedLocation.id == location.id ? .accentColor : .secondary)
+                                .controlSize(.small)
+                        }
+                        Button { stage.addLocation(); selectedLocationID = stage.locations.last?.id } label: {
+                            Image(systemName: "plus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(stage.locations.count >= stage.sourceMixers.count)
+                        Button { stage.removeLocation(selectedLocation.id) } label: {
+                            Image(systemName: "minus")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(stage.locations.count <= 1)
+                    }
+
+                    HStack(alignment: .center, spacing: 22) {
+                SpatialPadView(
+                    azimuth: locationBinding(\.azimuth),
+                    distance: locationBinding(\.distance),
+                    otherLocations: stage.locations.filter { $0.id != selectedLocation.id }
+                )
                     .frame(maxWidth: 430)
                     .frame(maxWidth: .infinity)
                     .opacity(stage.isEnabled ? 1 : 0.48)
                     .allowsHitTesting(stage.isEnabled)
 
                 VStack(spacing: 20) {
-                    VerticalSpatialSlider(
+                    SnappingVerticalSlider(
                         title: "HEIGHT",
-                        value: $stage.elevation,
+                        value: locationBinding(\.elevation),
                         range: -90...90,
                         valueText: { "\(Int($0.rounded()))°" }
                     )
-                    VerticalSpatialSlider(
+                    SnappingVerticalSlider(
                         title: "REVERB",
                         value: $stage.reverb,
                         range: 0...100,
@@ -93,14 +123,22 @@ struct SpatializerView: View {
             HStack {
                 fieldReadout(title: "DIRECTION", value: directionText)
                 Spacer()
-                fieldReadout(title: "DISTANCE", value: String(format: "%.1f m", stage.distance))
+                fieldReadout(title: "DISTANCE", value: String(format: "%.1f m", selectedLocation.distance))
             }
         }
         .card()
     }
 
+    private func locationBinding(_ keyPath: WritableKeyPath<SpatialLocation, Float>) -> Binding<Float> {
+        let id = selectedLocation.id
+        return Binding(
+            get: { stage.locations.first(where: { $0.id == id })?[keyPath: keyPath] ?? 0 },
+            set: { newValue in stage.updateLocation(id) { $0[keyPath: keyPath] = newValue } }
+        )
+    }
+
     private var directionText: String {
-        let degrees = Int(stage.azimuth.rounded())
+        let degrees = Int(selectedLocation.azimuth.rounded())
         if abs(degrees) < 3 { return "Front" }
         if abs(abs(degrees) - 180) < 3 { return "Behind" }
         return degrees < 0 ? "Left \(-degrees)°" : "Right \(degrees)°"
@@ -114,25 +152,86 @@ struct SpatializerView: View {
     }
 }
 
-private struct VerticalSpatialSlider: View {
+private struct SnappingVerticalSlider: View {
     let title: String
     @Binding var value: Float
     let range: ClosedRange<Float>
     let valueText: (Float) -> String
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 5) {
             Text(title)
                 .font(.caption2.weight(.semibold))
                 .foregroundColor(.secondary)
             Text(valueText(value))
                 .font(.caption.monospacedDigit())
-            Slider(value: $value, in: range)
-                .tint(.accentColor)
-                .frame(width: 132)
-                .rotationEffect(.degrees(-90))
-                .frame(width: 28, height: 132)
+            SpatialSliderTrack(title: title, value: $value, range: range)
         }
+    }
+}
+
+private struct SpatialSliderTrack: View {
+    let title: String
+    @Binding var value: Float
+    let range: ClosedRange<Float>
+
+    private let trackTop: CGFloat = 9
+
+    var body: some View {
+        GeometryReader { geometry in
+            let trackHeight = max(1, geometry.size.height - trackTop * 2)
+            let fraction = CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound))
+            let thumbY = trackTop + (1 - fraction) * trackHeight
+            let centered = range.lowerBound < 0 && range.upperBound > 0
+            let neutralFraction = centered ? CGFloat(-range.lowerBound / (range.upperBound - range.lowerBound)) : 0
+            let neutralY = trackTop + (1 - neutralFraction) * trackHeight
+            let fillTop = centered ? min(thumbY, neutralY) : thumbY
+            let fillHeight = centered ? abs(thumbY - neutralY) : geometry.size.height - trackTop - thumbY
+
+            ZStack {
+                Capsule().fill(Color.secondary.opacity(0.24))
+                    .frame(width: 4, height: trackHeight)
+                    .position(x: 12, y: trackTop + trackHeight / 2)
+                tickMarks(trackHeight: trackHeight)
+                Capsule().fill(Color.accentColor)
+                    .frame(width: 4, height: max(0, fillHeight))
+                    .position(x: 12, y: fillTop + max(0, fillHeight) / 2)
+                Circle().fill(Color.accentColor).frame(width: 14, height: 14)
+                    .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                    .position(x: 12, y: thumbY)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { gesture in
+                updateValue(at: gesture.location.y, trackHeight: trackHeight)
+            })
+        }
+        .frame(width: 54, height: 132)
+        .drawingGroup()
+    }
+
+    @ViewBuilder
+    private func tickMarks(trackHeight: CGFloat) -> some View {
+        let marks: [(CGFloat, String)] = title == "HEIGHT"
+            ? [(0, "−90°"), (0.5, "0°"), (1, "+90°")]
+            : [(0, "0%"), (0.5, "50%"), (1, "100%")]
+        ForEach(Array(marks.enumerated()), id: \.offset) { _, item in
+            let y = trackTop + (1 - item.0) * trackHeight
+            Rectangle().fill(Color.secondary)
+                .frame(width: 8, height: 1)
+                .position(x: 12, y: y)
+            Text(item.1)
+                .font(.system(size: 8, design: .rounded))
+                .foregroundColor(.secondary)
+                .frame(width: 34, alignment: .leading)
+                .position(x: 37, y: y)
+        }
+    }
+
+    private func updateValue(at y: CGFloat, trackHeight: CGFloat) {
+        let normalized = min(1, max(0, 1 - (y - trackTop) / trackHeight))
+        let marks: [CGFloat] = [0, 0.5, 1]
+        let snapped = marks.first(where: { abs(normalized - $0) < 0.035 }) ?? normalized
+        value = range.lowerBound + Float(snapped) * (range.upperBound - range.lowerBound)
     }
 }
 
@@ -140,6 +239,7 @@ private struct VerticalSpatialSlider: View {
 struct SpatialPadView: View {
     @Binding var azimuth: Float      // degrees, 0 = front, +90 = right
     @Binding var distance: Float     // meters
+    var otherLocations: [SpatialLocation] = []
     var maxDistance: Float = 10
 
     var body: some View {
@@ -175,6 +275,16 @@ struct SpatialPadView: View {
                 .padding(12)
                 .background(.ultraThinMaterial, in: Circle())
                 .position(x: radius, y: radius)
+            ForEach(Array(otherLocations.enumerated()), id: \.element.id) { index, location in
+                let sourceAzimuth = Double(location.azimuth) * .pi / 180
+                let sourceRadius = CGFloat(location.distance / maxDistance) * radius
+                Circle()
+                    .fill(index.isMultiple(of: 2) ? Color.cyan : Color.purple)
+                    .frame(width: 18, height: 18)
+                    .overlay(Circle().stroke(Color.white.opacity(0.9), lineWidth: 1.5))
+                    .position(x: radius + sourceRadius * CGFloat(sin(sourceAzimuth)),
+                              y: radius - sourceRadius * CGFloat(cos(sourceAzimuth)))
+            }
             Circle()
                 .fill(Color.accentColor)
                 .frame(width: 26, height: 26)

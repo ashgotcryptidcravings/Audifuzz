@@ -26,8 +26,10 @@ final class SoundLabEngine: ObservableObject {
     }
     
     @Published private(set) var isPlaying = false
+    @Published private(set) var isMIDIActive = false
     @Published private(set) var isSaving = false
     @Published private(set) var waveform = Array(repeating: Float.zero, count: 128)
+    @Published private(set) var waveformRight = Array(repeating: Float.zero, count: 128)
     @Published var statusMessage: String? {
         didSet {
             if let msg = statusMessage {
@@ -38,6 +40,9 @@ final class SoundLabEngine: ObservableObject {
     @Published private(set) var samples: [URL] = []
 
     private let renderer = SynthRenderer()
+    private var midiSlots: [Int: Int] = [:]
+    private var nextMIDISlot = 0
+    private var isManualPreview = false
     private let engine = AVAudioEngine()
     private let eq = AVAudioUnitEQ(numberOfBands: SoundLabEngine.eqFrequencies.count)
     private var sourceNode: AVAudioSourceNode?
@@ -88,7 +93,100 @@ final class SoundLabEngine: ObservableObject {
 
     func togglePlay() {
         print("[SoundLabEngine] Toggle preview playback requested...")
-        if isPlaying { stopPreview() } else { startPreview() }
+        if isPlaying {
+            isManualPreview = false
+            renderer.setBaseVoicesMuted(true)
+            stopPreview()
+        } else {
+            isManualPreview = true
+            renderer.setBaseVoicesMuted(false)
+            startPreview()
+        }
+    }
+
+    func receiveMIDINoteOn(channel: Int, note: UInt8, velocity: UInt8, mode: Int,
+                           selectedInstrument: Int, velocityEnabled: Bool) {
+        isMIDIActive = true
+        if !isManualPreview { renderer.setBaseVoicesMuted(true) }
+        if !isPlaying { startPreview() }
+        let noteID = channel * 128 + Int(note)
+        let slot: Int
+        if let existing = midiSlots[noteID] {
+            slot = existing
+        } else {
+            let occupied = Set(midiSlots.values)
+            if let available = (0..<SynthRenderer.maxMIDINotes).first(where: { !occupied.contains($0) }) {
+                slot = available
+            } else {
+                slot = nextMIDISlot
+                midiSlots = midiSlots.filter { $0.value != slot }
+                renderer.stopMIDINote(slot: slot)
+            }
+            nextMIDISlot = (slot + 1) % SynthRenderer.maxMIDINotes
+        }
+        midiSlots[noteID] = slot
+        let amplitude = velocityEnabled ? Float(velocity) / 127 : 1
+        let targetVoice: Int
+        if mode == 1 {
+            targetVoice = -1
+        } else if voices.indices.contains(selectedInstrument), voices[selectedInstrument].enabled {
+            targetVoice = selectedInstrument
+        } else {
+            targetVoice = voices.firstIndex(where: \.enabled) ?? selectedInstrument
+        }
+        renderer.startMIDINote(slot: slot, note: note, velocity: amplitude,
+                               selectedVoice: targetVoice)
+    }
+
+    func receiveMIDINoteOff(channel: Int, note: UInt8) {
+        let noteID = channel * 128 + Int(note)
+        guard let slot = midiSlots.removeValue(forKey: noteID) else { return }
+        renderer.stopMIDINote(slot: slot)
+        updateMIDIActiveState()
+    }
+
+    func receiveMIDIPitchBend(value: Int, rangeInSemitones: Int) {
+        let normalized = Float(value - 8192) / 8192
+        let semitones = normalized * Float(rangeInSemitones)
+        renderer.setMIDIPitchBend(powf(2, semitones / 12))
+    }
+
+    func receiveMIDIModulation(value: UInt8) {
+        renderer.setMIDIModulation(Float(value) / 127)
+    }
+
+    func receiveMIDIChannelPressure(channel: Int, value: UInt8) {
+        for (noteID, slot) in midiSlots where noteID / 128 == channel {
+            renderer.setMIDIPressure(slot: slot, amount: Float(value) / 127)
+        }
+    }
+
+    func receiveMIDIPolyPressure(channel: Int, note: UInt8, value: UInt8) {
+        let noteID = channel * 128 + Int(note)
+        guard let slot = midiSlots[noteID] else { return }
+        renderer.setMIDIPressure(slot: slot, amount: Float(value) / 127)
+    }
+
+    func receiveMIDIAllNotesOff() {
+        for noteID in Array(midiSlots.keys) {
+            if let slot = midiSlots.removeValue(forKey: noteID) { renderer.stopMIDINote(slot: slot) }
+        }
+        updateMIDIActiveState()
+    }
+
+    func stopManualPreview() {
+        guard !isMIDIActive else { return }
+        stopPreview()
+    }
+
+    private func updateMIDIActiveState() {
+        isMIDIActive = !midiSlots.isEmpty
+        if !isMIDIActive && !isManualPreview {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) { [weak self] in
+                guard let self, !self.isMIDIActive, !self.isManualPreview else { return }
+                self.stopPreview()
+            }
+        }
     }
 
     private func buildGraphIfNeeded() {
@@ -102,7 +200,7 @@ final class SoundLabEngine: ObservableObject {
         engine.attach(eq)
         engine.connect(node, to: eq, format: format)
         engine.connect(eq, to: engine.mainMixerNode, format: format)
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 256, format: format) { [weak self] buffer, _ in
             self?.captureWaveform(from: buffer)
         }
         sourceNode = node
@@ -132,10 +230,16 @@ final class SoundLabEngine: ObservableObject {
     }
 
     func stopPreview() {
+        isManualPreview = false
+        for slot in midiSlots.values { renderer.stopMIDINote(slot: slot) }
+        midiSlots.removeAll()
+        isMIDIActive = false
+        renderer.setBaseVoicesMuted(false)
         guard isPlaying else { return }
         engine.stop()
         isPlaying = false
         waveform = Array(repeating: 0, count: waveform.count)
+        waveformRight = Array(repeating: 0, count: waveformRight.count)
         print("[SoundLabEngine] SUCCESS: Live synth preview stopped.")
     }
 
@@ -147,17 +251,16 @@ final class SoundLabEngine: ObservableObject {
         let channelCount = Int(buffer.format.channelCount)
         let pointCount = 128
         var points = Array(repeating: Float.zero, count: pointCount)
+        var rightPoints = Array(repeating: Float.zero, count: pointCount)
         for point in 0..<pointCount {
             let frame = min(frameCount - 1, point * frameCount / pointCount)
-            var sample: Float = 0
-            for channel in 0..<channelCount {
-                sample += channels[channel][frame]
-            }
-            points[point] = sample / Float(max(1, channelCount))
+            points[point] = channels[0][frame]
+            rightPoints[point] = channels[min(1, channelCount - 1)][frame]
         }
 
         DispatchQueue.main.async { [weak self] in
             self?.waveform = points
+            self?.waveformRight = rightPoints
         }
     }
 

@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A12500013070000100000001 /* Oscilloscope3DView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12500023070000100000001 /* Oscilloscope3DView.swift */; };
+		A12700013070000100000001 /* TouchBarControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12700023070000100000001 /* TouchBarControls.swift */; };
+		A12400013070000100000001 /* MIDIInputManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12400023070000100000001 /* MIDIInputManager.swift */; };
+		A12300013070000100000001 /* CompressorEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12300023070000100000001 /* CompressorEffect.swift */; };
+		A12300033070000100000001 /* ToneEQEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12300043070000100000001 /* ToneEQEffect.swift */; };
 		720862A13065CC3D001E9D47 /* DanganronpaIntro.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 720862A03065CC3D001E9D47 /* DanganronpaIntro.mp3 */; };
 		729543D430600A4200B33115 /* Audifuzz.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 729543D230600A4200B33115 /* Audifuzz.xcdatamodeld */; };
 		729543D830600A4400B33115 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 729543D730600A4400B33115 /* Assets.xcassets */; };
@@ -39,9 +44,16 @@
 		729544E13065906E00B33115 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544E03065906E00B33115 /* PreferencesView.swift */; };
 		729544E23065906E00B33115 /* BuiltInSoundLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544E23065906E00B33116 /* BuiltInSoundLibrary.swift */; };
 		729544E33065906E00B33115 /* SoundLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544E33065906E00B33116 /* SoundLibraryView.swift */; };
+		729544F03065906E00B33115 /* OscilloscopeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544F03065906E00B33116 /* OscilloscopeView.swift */; };
+		729544F13065906E00B33115 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 729544F13065906E00B33116 /* WhatsNewView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A12500023070000100000001 /* Oscilloscope3DView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Oscilloscope3DView.swift; sourceTree = "<group>"; };
+		A12700023070000100000001 /* TouchBarControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TouchBarControls.swift; sourceTree = "<group>"; };
+		A12400023070000100000001 /* MIDIInputManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIInputManager.swift; sourceTree = "<group>"; };
+		A12300023070000100000001 /* CompressorEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompressorEffect.swift; sourceTree = "<group>"; };
+		A12300043070000100000001 /* ToneEQEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneEQEffect.swift; sourceTree = "<group>"; };
 		720862A03065CC3D001E9D47 /* DanganronpaIntro.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = DanganronpaIntro.mp3; sourceTree = "<group>"; };
 		729543CB30600A4200B33115 /* Audifuzz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Audifuzz.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		729543D330600A4200B33115 /* Audifuzz.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Audifuzz.xcdatamodel; sourceTree = "<group>"; };
@@ -51,9 +63,9 @@
 		729543E230600B8C00B33115 /* codemagic.yaml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.yaml; path = codemagic.yaml; sourceTree = "<group>"; };
 		729543E430600B9400B33115 /* AGENTS.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
 		7295444A30601E2800B33115 /* AudifuzzApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = AudifuzzApp.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/AudifuzzApp.swift"; sourceTree = "<group>"; };
-		7295445630601E3B00B33115 /* SampleStorage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SampleStorage.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/SampleStorage.swift"; sourceTree = "<group>"; };
-		7295446630601E4600B33115 /* Preset.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Preset.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Presets/Preset.swift"; sourceTree = "<group>"; };
-		7295446830601E5300B33115 /* Dial.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Dial.swift; path = "../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/Dial.swift"; sourceTree = "<group>"; };
+		7295445630601E3B00B33115 /* SampleStorage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SampleStorage.swift; path = "../../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Audio/SampleStorage.swift"; sourceTree = "<group>"; };
+		7295446630601E4600B33115 /* Preset.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Preset.swift; path = "../../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Presets/Preset.swift"; sourceTree = "<group>"; };
+		7295446830601E5300B33115 /* Dial.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Dial.swift; path = "../../../../../../Downloads/Audifuzz-starter 3/Audifuzz/Views/Dial.swift"; sourceTree = "<group>"; };
 		7295447E3064DDA200B33115 /* SoundLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundLabView.swift; sourceTree = "<group>"; };
 		7295447F3064DDA200B33115 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		729544803064DDA200B33115 /* SpatialCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialCardView.swift; sourceTree = "<group>"; };
@@ -76,6 +88,8 @@
 		729544E03065906E00B33115 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		729544E23065906E00B33116 /* BuiltInSoundLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuiltInSoundLibrary.swift; sourceTree = "<group>"; };
 		729544E33065906E00B33116 /* SoundLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundLibraryView.swift; sourceTree = "<group>"; };
+		729544F03065906E00B33116 /* OscilloscopeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OscilloscopeView.swift; sourceTree = "<group>"; };
+		729544F13065906E00B33116 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,12 +103,51 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		720862A23065D0BC001E9D47 /* PreBundledSounds */ = {
+		A12600013070000100000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7295444A30601E2800B33115 /* AudifuzzApp.swift */,
+				729544B43064DF5F00B33115 /* Persistence.swift */,
+				729543D230600A4200B33115 /* Audifuzz.xcdatamodeld */,
+				729543D930600A4400B33115 /* Audifuzz.entitlements */,
+			);
+			name = App;
+			sourceTree = "<group>";
+		};
+		A12600023070000100000001 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				729543D730600A4400B33115 /* Assets.xcassets */,
+				729543DA30600A4400B33115 /* Preview Content */,
+				720862A23065D0BC001E9D47 /* PreBundledMP3s */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		A12600033070000100000001 /* Documentation */ = {
+			isa = PBXGroup;
+			children = (
+				729543E430600B9400B33115 /* AGENTS.md */,
+				729544DE3065897F00B33115 /* FILE_TREE.md */,
+			);
+			name = Documentation;
+			sourceTree = "<group>";
+		};
+		A12600043070000100000001 /* Build Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				729543E230600B8C00B33115 /* codemagic.yaml */,
+			);
+			name = "Build Configuration";
+			sourceTree = "<group>";
+		};
+
+		720862A23065D0BC001E9D47 /* PreBundledMP3s */ = {
 			isa = PBXGroup;
 			children = (
 				720862A03065CC3D001E9D47 /* DanganronpaIntro.mp3 */,
 			);
-			path = PreBundledSounds;
+			path = PreBundledMP3s;
 			sourceTree = "<group>";
 		};
 		729543C230600A4200B33115 = {
@@ -116,23 +169,14 @@
 		729543CD30600A4200B33115 /* Audifuzz */ = {
 			isa = PBXGroup;
 			children = (
-				720862A23065D0BC001E9D47 /* PreBundledSounds */,
-				7295448F3064DE5500B33115 /* Instruments */,
+				A12600013070000100000001 /* App */,
 				7295448C3064DE2A00B33115 /* Engines */,
-				7295447D3064DDA200B33115 /* Views */,
 				729544833064DDCF00B33115 /* Effects */,
-				7295444A30601E2800B33115 /* AudifuzzApp.swift */,
-				7295445630601E3B00B33115 /* SampleStorage.swift */,
-				7295446630601E4600B33115 /* Preset.swift */,
-				729544B43064DF5F00B33115 /* Persistence.swift */,
-				7295446830601E5300B33115 /* Dial.swift */,
-				729543E430600B9400B33115 /* AGENTS.md */,
-				729544DE3065897F00B33115 /* FILE_TREE.md */,
-				729543E230600B8C00B33115 /* codemagic.yaml */,
-				729543D730600A4400B33115 /* Assets.xcassets */,
-				729543D930600A4400B33115 /* Audifuzz.entitlements */,
-				729543D230600A4200B33115 /* Audifuzz.xcdatamodeld */,
-				729543DA30600A4400B33115 /* Preview Content */,
+				7295448F3064DE5500B33115 /* Instruments */,
+				7295447D3064DDA200B33115 /* Views */,
+				A12600023070000100000001 /* Resources */,
+				A12600033070000100000001 /* Documentation */,
+				A12600043070000100000001 /* Build Configuration */,
 			);
 			path = Audifuzz;
 			sourceTree = "<group>";
@@ -155,6 +199,11 @@
 				729544803064DDA200B33115 /* SpatialCardView.swift */,
 				729544E03065906E00B33115 /* PreferencesView.swift */,
 				729544E33065906E00B33116 /* SoundLibraryView.swift */,
+				729544F03065906E00B33116 /* OscilloscopeView.swift */,
+				A12500023070000100000001 /* Oscilloscope3DView.swift */,
+				A12700023070000100000001 /* TouchBarControls.swift */,
+				729544F13065906E00B33116 /* WhatsNewView.swift */,
+				7295446830601E5300B33115 /* Dial.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -163,6 +212,8 @@
 			isa = PBXGroup;
 			children = (
 				7295448A3064DDD000B33115 /* EffectModule.swift */,
+				A12300023070000100000001 /* CompressorEffect.swift */,
+				A12300043070000100000001 /* ToneEQEffect.swift */,
 				729544893064DDD000B33115 /* BitCrushEffect.swift */,
 				729544873064DDD000B33115 /* DelayEffect.swift */,
 				729544843064DDD000B33115 /* FilterEffect.swift */,
@@ -178,8 +229,11 @@
 			isa = PBXGroup;
 			children = (
 				7295448D3064DE2A00B33115 /* AudioEngineManager.swift */,
+				A12400023070000100000001 /* MIDIInputManager.swift */,
 				7295448E3064DE2A00B33115 /* SoundLabEngine.swift */,
 				729544E23065906E00B33116 /* BuiltInSoundLibrary.swift */,
+				7295445630601E3B00B33115 /* SampleStorage.swift */,
+				7295446630601E4600B33115 /* Preset.swift */,
 			);
 			path = Engines;
 			sourceTree = "<group>";
@@ -268,6 +322,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				729544AA3064DEF200B33115 /* EffectModule.swift in Sources */,
+				A12300013070000100000001 /* CompressorEffect.swift in Sources */,
+				A12300033070000100000001 /* ToneEQEffect.swift in Sources */,
 				729544B13064DEF200B33115 /* OverdriveEffect.swift in Sources */,
 				729544A73064DEC300B33115 /* EffectCardView.swift in Sources */,
 				729544A93064DEC300B33115 /* SampleStorage.swift in Sources */,
@@ -276,6 +332,7 @@
 				729544E23065906E00B33115 /* BuiltInSoundLibrary.swift in Sources */,
 				729544A23064DEC300B33115 /* ContentView.swift in Sources */,
 				729544A53064DEC300B33115 /* AudioEngineManager.swift in Sources */,
+				A12400013070000100000001 /* MIDIInputManager.swift in Sources */,
 				729544B53064DF5F00B33115 /* Persistence.swift in Sources */,
 				729544AF3064DEF200B33115 /* SpatialStage.swift in Sources */,
 				729544A83064DEC300B33115 /* SoundLabView.swift in Sources */,
@@ -292,6 +349,10 @@
 				729544AC3064DEF200B33115 /* DelayEffect.swift in Sources */,
 				729544A63064DEC300B33115 /* EditorView.swift in Sources */,
 				729544A13064DEC300B33115 /* SpatialCardView.swift in Sources */,
+				729544F03065906E00B33115 /* OscilloscopeView.swift in Sources */,
+				A12500013070000100000001 /* Oscilloscope3DView.swift in Sources */,
+				A12700013070000100000001 /* TouchBarControls.swift in Sources */,
+				729544F13065906E00B33115 /* WhatsNewView.swift in Sources */,
 				7295449C3064DEC300B33115 /* Dial.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

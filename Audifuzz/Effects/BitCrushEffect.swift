@@ -11,8 +11,8 @@ final class BitCrushEffect: EffectModule {
         dist = d
         super.init(key: "bitcrush", name: "Bit Crush", unit: d, parameters: [
             EffectParameter(id: "gain", name: "Gain", range: -6...20, value: 0, unit: " dB"),
-            EffectParameter(id: "mix", name: "Mix", range: 0...100, value: 0, unit: "%"),
-            EffectParameter(id: "mode", name: "Mode", range: 1...4, value: 4,
+            EffectParameter(id: "mix", name: "Mix", range: 0...100, value: 50, unit: "%"),
+            EffectParameter(id: "mode", name: "Decimation", range: 1...4, value: 4,
                             display: { value in "Decim \(Int(value.rounded()))" })
         ])
         apply()
@@ -26,6 +26,7 @@ final class BitCrushEffect: EffectModule {
         case 1: preset = .multiDecimated1
         case 2: preset = .multiDecimated2
         case 3: preset = .multiDecimated3
+        case 4: preset = .multiDecimated4
         default: preset = .multiDecimated4
         }
         dist.loadFactoryPreset(preset)

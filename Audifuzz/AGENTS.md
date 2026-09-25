@@ -1,21 +1,10 @@
 ## How navigation works
-`ContentView` is a `NavigationView` with a sidebar `List`. Each page is one `NavigationLink` with a unique integer `tag` bound to `selection`. `ContentView` owns every engine as a `@StateObject` and passes it into the page. Pages never create their own engines.
+`ContentView` owns the top SF Symbol navigation bar and active-page selection. It owns every engine as a `@StateObject` and passes it into the selected page. Pages never create their own engines.
 
 ### To add a new page
 1. **Create the screen:** `Views/YourPageView.swift`, a SwiftUI `View`. Wrap sections in `.card()` and use `Dial` for adjustable values.
-2. **If it needs audio or logic,** create its own engine class in a new folder (for example `Audifuzz/YourFeature/YourEngine.swift`), an `ObservableObject` like `SoundLabEngine`. Give each page its own `AVAudioEngine`. Do not add nodes to the Editor's engine.
-3. **Wire it into `ContentView.swift`:**
-   - Add `@StateObject private var yourEngine = YourEngine()` if the page has one.
-   - Add a `NavigationLink` inside the sidebar `List` with the **next unused tag** (2, 3, ...):
-     ```swift
-     NavigationLink(
-         destination: YourPageView(engine: yourEngine),
-         tag: 2,
-         selection: $selection
-     ) {
-         Label("Your Page", systemImage: "star")
-     }
-     ```
+2. **If it needs audio or logic,** create its own engine class in a new folder (for example `Engines/YourEngine.swift`), an `ObservableObject` like `SoundLabEngine`. Give each page its own `AVAudioEngine`. Do not add nodes to the Editor's engine.
+3. **Wire it into `ContentView.swift`:** add `@StateObject private var yourEngine = YourEngine()` if needed, then add an SF Symbol button and destination case using the next selection index.
 4. **Talking between pages:** pass a closure into the destination view, like Sound Lab's "Use in Editor" (`manager.load(url:)` then `selection = 0`). Pages should not reference each other directly.
 5. **Stop work when leaving:** add `.onDisappear { yourEngine.stop() }` so an idle page doesn't keep audio running.
 6. **Permissions:** if the page needs a new permission (camera, files, etc.), add its Info key to both targets and list it under Permissions below.
@@ -29,7 +18,7 @@ Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - Call `apply()` at the end of the subclass `init`.
 
 ### To add a new effect
-1. Create `Audio/Effects/YourEffect.swift`, subclassing `EffectModule` (copy `DelayEffect.swift` as a template).
+1. Create `Effects/YourEffect.swift`, subclassing `EffectModule` (copy `DelayEffect.swift` as a template).
 2. Add `YourEffect()` to the `effects` array in `AudioEngineManager.init()`.
 3. Nothing else. The card, dials, reordering, randomize, reset, and presets pick it up automatically.
 
@@ -38,6 +27,7 @@ Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - Prefer Apple's built-in `AVAudioUnit*` effects. Write custom DSP only when a built-in can't do the job.
 - **All effect connections live in `AudioEngineManager.rebuildChain()`.** Don't connect nodes anywhere else.
 - **The microphone runs in its own `AVAudioEngine` (`micEngine`) and is fed to the output engine through `micPlayer`.** Never touch `inputNode` on the output engine: on macOS, mixing live input and output in one engine crashes with `isInputConnToConverter`.
+- `MIDIInputManager` is shared by the app window and the macOS Settings scene. CoreMIDI callbacks dispatch parsed messages to the main queue before changing observable settings, instruments, or effect parameters.
 - The Editor's output engine stays running after a file loads and the file is pre-scheduled (`armFile()`), so Play is instant. Keep it that way. File opening happens off the main thread and sets `isLoading`, which the UI shows as "Loading file…".
 - The spatializer needs a mono input, so `SpatialStage.mixer` downmixes before `AVAudioEnvironmentNode`.
 - On iOS, set up `AVAudioSession` before starting an engine (`configureSession()`). The mic needs `.playAndRecord`.
@@ -86,4 +76,17 @@ Every effect is a subclass of `EffectModule` that wraps one `AVAudioUnit`.
 - Custom bitcrusher, ring mod, and wavefolder via render blocks
 - Save the processed Editor output to a file (offline rendering)
 - Level meter using a single cheap tap on the main mixer
-- Note keyboard for the Sound Lab
+- Note keyboard for SynthSpace
+
+## Added page files
+- `Views/OscilloscopeView.swift`: live display of processed Editor output.
+- `Views/Oscilloscope3DView.swift`: interactive stereo-phase scope, with left/right amplitude and time on separate axes.
+- `Views/WhatsNewView.swift`: release highlights shown on app launch.
+- `Views/TouchBarControls.swift`: macOS page-aware playback and editing controls, hosted by `ContentView`.
+
+## Added effect files
+- `Effects/CompressorEffect.swift`: Apple Dynamics Processor wrapper.
+- `Effects/ToneEQEffect.swift`: three-band tone equalizer.
+
+## Added MIDI input file
+- `Engines/MIDIInputManager.swift`: shared CoreMIDI input device and channel routing.

@@ -3,188 +3,207 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var manager = AudioEngineManager()
     @StateObject private var lab = SoundLabEngine()
-    @State private var selection: Int? = 0
+    @StateObject private var midi = MIDIInputManager.shared
+    @State private var selection = 0
+    @State private var selectedVoiceIndex = 0
+    @State private var scopeMode = 0
+    @State private var selectedSpatialLocationID: UUID?
+    @State private var selectedLibraryURL: URL?
     @AppStorage("audifuzzWhatsNewVersion") private var whatsNewVersion = ""
     @State private var showWhatsNew = false
 
-    private let currentWhatsNewVersion = "2026.09.24.1"
+    private let currentWhatsNewVersion = "2026.09.24.4"
+    private let destinations: [(title: String, symbol: String)] = [
+        ("Editor", "slider.horizontal.3"),
+        ("SynthSpace", "waveform"),
+        ("Spatializer", "dot.radiowaves.left.and.right"),
+        ("Equalizer", "slider.vertical.3"),
+        ("Oscilloscope", "waveform.path")
+    ]
 
     var body: some View {
-        NavigationView {
-            List {
-                NavigationLink(
-                    destination: EditorView(manager: manager),
-                    tag: 0,
-                    selection: $selection
-                ) {
-                    Label("Editor", systemImage: "slider.horizontal.3")
-                }
+        VStack(spacing: 0) {
+            NowPlayingBar(manager: manager)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
 
-                NavigationLink(
-                    destination: SoundLabView(lab: lab) { url in
+            Divider()
+
+            Group {
+                switch selection {
+                case 1:
+                    SoundLabView(lab: lab, selectedVoiceIndex: $selectedVoiceIndex) { url in
                         manager.load(url: url)
                         selection = 0
-                    },
-                    tag: 1,
-                    selection: $selection
-                ) {
-                    Label("Sound Lab", systemImage: "waveform")
-                }
-
-                NavigationLink(
-                    destination: SpatializerView(stage: manager.spatial),
-                    tag: 2,
-                    selection: $selection
-                ) {
-                    Label("Spatializer", systemImage: "dot.radiowaves.left.and.right")
-                }
-
-                NavigationLink(
-                    destination: EqualizerView(lab: lab),
-                    tag: 3,
-                    selection: $selection
-                ) {
-                    Label("Equalizer", systemImage: "slider.vertical.3")
-                }
-
-                NavigationLink(
-                    destination: SoundLibraryView(lab: lab) { url in
-                        manager.load(url: url)
-                        selection = 0
-                    },
-                    tag: 4,
-                    selection: $selection
-                ) {
-                    Label("Sound Library", systemImage: "books.vertical")
-                }
-            }
-            .listStyle(.sidebar)
-            #if os(macOS)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button(action: toggleSidebar) {
-                        Image(systemName: "sidebar.leading")
                     }
+                case 2:
+                    SpatializerView(stage: manager.spatial, selectedLocationID: $selectedSpatialLocationID)
+                case 3:
+                    EqualizerView(lab: lab)
+                case 4:
+                    OscilloscopeView(manager: manager, lab: lab, shapeMode: $scopeMode)
+                case 5:
+                    SoundLibraryView(lab: lab, onUseSample: { url in
+                        manager.load(url: url)
+                        selectedLibraryURL = nil
+                        selection = 0
+                    }, onBack: { selectedLibraryURL = nil }, selectedURL: $selectedLibraryURL)
+                case 6:
+                    PreferencesView(midi: midi)
+                default:
+                    EditorView(manager: manager)
                 }
             }
-            #endif
-
-            // Default page shown when the app launches (Mac)
-            EditorView(manager: manager)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        #if os(iOS)
-        .navigationViewStyle(.stack)
-        #endif
+        .frame(minWidth: 620, minHeight: 500)
+#if os(macOS)
+        .touchBar {
+            TouchBarControls(
+                manager: manager,
+                lab: lab,
+                spatial: manager.spatial,
+                page: $selection,
+                selectedVoiceIndex: $selectedVoiceIndex,
+                scopeMode: $scopeMode,
+                selectedSpatialLocationID: $selectedSpatialLocationID,
+                selectedLibraryURL: $selectedLibraryURL,
+                addSelectedSample: addSelectedLibrarySample
+            )
+        }
+#endif
+        .toolbar {
+#if os(macOS)
+            ToolbarItemGroup(placement: .navigation) { navigationButtons }
+#else
+            ToolbarItemGroup(placement: .navigationBarTrailing) { navigationButtons }
+#endif
+        }
         .onAppear {
-            if whatsNewVersion != currentWhatsNewVersion {
-                showWhatsNew = true
+            if whatsNewVersion != currentWhatsNewVersion { showWhatsNew = true }
+        }
+        .onReceive(midi.messages) { message in
+            switch message {
+            case let .noteOn(channel, note, velocity):
+                lab.receiveMIDINoteOn(channel: channel, note: note, velocity: velocity,
+                                      mode: midi.mode, selectedInstrument: midi.selectedInstrument,
+                                      velocityEnabled: midi.velocityControlsVolume)
+            case let .noteOff(channel, note):
+                lab.receiveMIDINoteOff(channel: channel, note: note)
+            case let .pitchBend(_, value):
+                lab.receiveMIDIPitchBend(value: value, rangeInSemitones: midi.pitchBendRange)
+            case let .channelPressure(channel, value):
+                lab.receiveMIDIChannelPressure(channel: channel, value: value)
+            case let .polyPressure(channel, note, value):
+                lab.receiveMIDIPolyPressure(channel: channel, note: note, value: value)
+            case let .controlChange(_, controller, value):
+                if controller == 1 { lab.receiveMIDIModulation(value: value) }
+                if midi.effectsCCEnabled, let index = midi.knobIndex(for: controller) {
+                    manager.receiveMIDIControlChange(parameterIndex: index, value: value)
+                }
+            case let .effectButton(index, enabled):
+                if midi.effectsCCEnabled { manager.receiveMIDIEffectButton(index: index, enabled: enabled) }
+            case .allNotesOff:
+                lab.receiveMIDIAllNotesOff()
             }
         }
         .sheet(isPresented: $showWhatsNew, onDismiss: {
             whatsNewVersion = currentWhatsNewVersion
         }) {
-            WhatsNewView {
-                showWhatsNew = false
-            }
+            WhatsNewView { showWhatsNew = false }
         }
     }
 
-    #if os(macOS)
-    /// Programmatically toggles the macOS sidebar open and closed.
-    /// AppKit only: this must stay inside #if os(macOS) or the iPhone build breaks.
-    private func toggleSidebar() {
-        _ = NSApp.keyWindow?.firstResponder?.tryToPerform(
-            #selector(NSSplitViewController.toggleSidebar(_:)),
-            with: nil
-        )
+    private var navigationButtons: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(destinations.enumerated()), id: \.offset) { index, destination in
+                navigationButton(index: index, title: destination.title, symbol: destination.symbol)
+            }
+#if os(iOS)
+            navigationButton(index: 6, title: "Settings", symbol: "gearshape")
+#endif
+            navigationButton(index: 5, title: "Sound Library", symbol: "books.vertical")
+        }
     }
-    #endif
+
+    private func addSelectedLibrarySample() {
+        guard let url = selectedLibraryURL else { return }
+        lab.stopPreview()
+        manager.load(url: url)
+        selectedLibraryURL = nil
+        selection = 0
+    }
+
+    private func navigationButton(index: Int, title: String, symbol: String) -> some View {
+        Button {
+            selection = index
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 34, height: 30)
+                .foregroundColor(selection == index ? .white : .primary)
+                .background(selection == index ? Color.accentColor : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+    }
 }
 
-private struct WhatsNewView: View {
-    let onDone: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 12) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundColor(.accentColor)
-                    .frame(width: 70, height: 70)
-                    .background(Color.accentColor.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                
-                Text("Here's what's new!")
-                    .font(.largeTitle.bold())
-                Text("More sounds to shape, explore, and make your own.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.top, 30)
-            .padding(.horizontal, 28)
-            
-            ScrollView {
-                VStack(spacing: 12) {
-                    whatsNewRow(
-                        icon: "books.vertical",
-                        title: "Sound Library",
-                        detail: "Browse included sounds, open their details, and send any of them straight to the Editor."
-                    )
-                    whatsNewRow(
-                        icon: "music.note.list",
-                        title: "Bundled audio",
-                        detail: "Packaged MP3, WAV, M4A, AIF, and CAF files can now appear in the library automatically."
-                    )
-                    whatsNewRow(
-                        icon: "waveform.badge.plus",
-                        title: "Room to grow",
-                        detail: "Ten reserved sound slots are ready for future audio additions without changing the library layout."
-                    )
-                    whatsNewRow(
-                        icon: "info.circle",
-                        title: "Sound details",
-                        detail: "Inspect length, channels, bitrate, key, and date added before using a sound."
-                    )
-                }
-                .padding(28)
-            }
-            
-            Button("Start exploring", action: onDone)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.bottom, 24)
-        }
-        .frame(minWidth: 360, minHeight: 500)
-    }
-    
-    private func whatsNewRow(icon: String, title: String, detail: String) -> some View {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: icon)
-                    .font(.headline)
-                    .foregroundColor(.accentColor)
-                    .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.headline)
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-            .background(Color.secondary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-    } // <-- Closes WhatsNewView
+private struct NowPlayingBar: View {
+    @ObservedObject var manager: AudioEngineManager
 
-    // Move the preview out here to the global scope:
-    struct ContentView_Previews: PreviewProvider {
-        static var previews: some View {
-            ContentView()
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: manager.source == .mic ? "mic.fill" : "waveform")
+                .foregroundColor(.accentColor)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(manager.isLoading ? "Loading…" : (manager.fileName ?? "Nothing Playing"))
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Text(manager.source == .mic && manager.isMicLive ? "Microphone" : (manager.isPlaying ? "Playing" : "Paused"))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .frame(minWidth: 100, maxWidth: 220, alignment: .leading)
+
+            Button {
+                manager.togglePlayback()
+            } label: {
+                Image(systemName: manager.isPlaying ? "pause.fill" : "play.fill")
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .disabled(manager.fileName == nil || manager.isLoading || manager.isMicLive)
+            .help(manager.isPlaying ? "Pause" : "Play")
+
+            Button {
+                manager.isLooping.toggle()
+            } label: {
+                Image(systemName: "repeat")
+                    .foregroundColor(manager.isLooping ? .accentColor : .secondary)
+                    .frame(width: 24, height: 28)
+            }
+            .buttonStyle(.plain)
+            .help(manager.isLooping ? "Loop on" : "Loop off")
+
+            Image(systemName: "speaker.fill")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Slider(value: $manager.outputVolume, in: 0...1)
+                .frame(maxWidth: 130)
+                .help("Output volume")
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View { ContentView() }
+}

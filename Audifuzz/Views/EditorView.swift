@@ -9,7 +9,7 @@ struct EditorView: View {
 /// Main page title
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            LazyVStack(alignment: .center, spacing: 14) {
                 VStack(spacing: 4) {
                     Text("Audifuzz Beta")
                         .font(.largeTitle.bold())

@@ -33,6 +33,11 @@ final class AudioEngineManager: ObservableObject {
     @Published private(set) var fileName: String?
     @Published private(set) var isMicLive = false
     @Published private(set) var isRecording = false
+    @Published var outputVolume: Float = 0.8 {
+        didSet { engine.mainMixerNode.outputVolume = outputVolume }
+    }
+    @Published var isLooping = false
+    @Published private(set) var oscilloscopeSamples = Array(repeating: Float.zero, count: 1024)
     @Published var errorMessage: String? {
         didSet {
             if let msg = errorMessage {
@@ -57,6 +62,10 @@ final class AudioEngineManager: ObservableObject {
         let resolved = size > 0 ? AVAudioFrameCount(size) : 512
         print("[Preferences] Buffer size requested: \(resolved) frames")
         return resolved
+    }
+
+    private var processingBufferSize: AVAudioFrameCount {
+        UserDefaults.standard.bool(forKey: "safeMode") ? max(userBufferSize * 2, 1024) : userBufferSize
     }
 
     private var preferredInputDeviceID: UInt32 {
@@ -85,8 +94,11 @@ final class AudioEngineManager: ObservableObject {
     private var file: AVAudioFile?
     private var scopedURL: URL?
     private var playbackID = 0
+    private var hasScheduledFile = false
     private var micConnected = false
     private var recordingURL: URL?
+    private var loadedURL: URL?
+    private var temporaryPlaybackURL: URL?
 
     // Mic engine (input only)
     private let micEngine = AVAudioEngine()
@@ -99,8 +111,14 @@ final class AudioEngineManager: ObservableObject {
     private var micPlayerReady = false
     private var recordingFile: AVAudioFile?
     private var preferenceObserver: NSObjectProtocol?
+    private let scopeCapacity = 8192
+    private let scopeStorage = UnsafeMutablePointer<Float>.allocate(capacity: 8192)
+    private let scopeRightStorage = UnsafeMutablePointer<Float>.allocate(capacity: 8192)
+    private var scopeWritePosition = 0
 
     init() {
+        scopeStorage.initialize(repeating: 0, count: scopeCapacity)
+        scopeRightStorage.initialize(repeating: 0, count: scopeCapacity)
         print("[AudioEngineManager] Initializing audio engine and effect modules...")
         effects = [
             OverdriveEffect(),
@@ -108,12 +126,14 @@ final class AudioEngineManager: ObservableObject {
             FilterEffect(),
             PitchEffect(),
             DelayEffect(),
-            ReverbEffect()
+            ReverbEffect(),
+            CompressorEffect(),
+            ToneEQEffect()
         ]
         engine.attach(player)
         engine.attach(micPlayer)
         engine.attach(sourceMixer)
-        engine.attach(spatial.mixer)
+        spatial.sourceMixers.forEach { engine.attach($0) }
         engine.attach(spatial.environment)
         effects.forEach { engine.attach($0.unit) }
         applyPreferredDevices()
@@ -125,6 +145,8 @@ final class AudioEngineManager: ObservableObject {
         }
         refreshGraphFormat()
         rebuildChain()
+        installOscilloscopeTap()
+        engine.mainMixerNode.outputVolume = outputVolume
 
         NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
@@ -153,6 +175,11 @@ final class AudioEngineManager: ObservableObject {
     }
 
     deinit {
+        engine.mainMixerNode.removeTap(onBus: 0)
+        scopeStorage.deallocate()
+        if let temporaryPlaybackURL = temporaryPlaybackURL {
+            try? FileManager.default.removeItem(at: temporaryPlaybackURL)
+        }
         if let observer = preferenceObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -173,6 +200,11 @@ final class AudioEngineManager: ObservableObject {
             if file != nil {
                 restartEngine()
             }
+        case "safeMode":
+            if isMicLive { installMicTap() }
+            if file != nil { restartEngine() }
+        case "resamplingQuality":
+            if let url = loadedURL { load(url: url) }
         case "inputDevice":
             if isMicLive {
                 stopMic()
@@ -189,10 +221,83 @@ final class AudioEngineManager: ObservableObject {
 
     // MARK: - File loading
 
+    /// Convert off the audio thread so the selected AVAudioConverter quality is honored.
+    private func makePlaybackFile(from inputFile: AVAudioFile) throws -> AVAudioFile {
+        let target = graphFormat
+        guard inputFile.processingFormat.sampleRate != target.sampleRate ||
+                inputFile.processingFormat.channelCount != target.channelCount,
+              let converter = AVAudioConverter(from: inputFile.processingFormat, to: target) else {
+            return inputFile
+        }
+
+        switch UserDefaults.standard.string(forKey: "resamplingQuality") ?? "high" {
+        case "low": converter.sampleRateConverterQuality = AVAudioQuality.low.rawValue
+        case "medium": converter.sampleRateConverterQuality = AVAudioQuality.medium.rawValue
+        case "sinc": converter.sampleRateConverterQuality = AVAudioQuality.max.rawValue
+        default: converter.sampleRateConverterQuality = AVAudioQuality.high.rawValue
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Audifuzz-Playback-\(UUID().uuidString).caf")
+        var shouldKeepTemporaryFile = false
+        defer {
+            if !shouldKeepTemporaryFile { try? FileManager.default.removeItem(at: url) }
+        }
+        var outputFile: AVAudioFile? = try AVAudioFile(forWriting: url, settings: target.settings)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: 16384) else {
+            throw NSError(domain: "AudifuzzAudio", code: -1)
+        }
+
+        var reachedEnd = false
+        while !reachedEnd {
+            var suppliedInput = false
+            var readError: Error?
+            var conversionError: NSError?
+            outputBuffer.frameLength = 0
+            let status = converter.convert(to: outputBuffer, error: &conversionError) { _, inputStatus in
+                guard !suppliedInput else {
+                    inputStatus.pointee = .noDataNow
+                    return nil
+                }
+                suppliedInput = true
+                guard let inputBuffer = AVAudioPCMBuffer(
+                    pcmFormat: inputFile.processingFormat,
+                    frameCapacity: 4096
+                ) else {
+                    inputStatus.pointee = .endOfStream
+                    return nil
+                }
+                do {
+                    try inputFile.read(into: inputBuffer, frameCount: 4096)
+                } catch {
+                    readError = error
+                    inputStatus.pointee = .endOfStream
+                    return nil
+                }
+                guard inputBuffer.frameLength > 0 else {
+                    inputStatus.pointee = .endOfStream
+                    return nil
+                }
+                inputStatus.pointee = .haveData
+                return inputBuffer
+            }
+            if let error = readError { throw error }
+            if let error = conversionError { throw error }
+            if outputBuffer.frameLength > 0 { try outputFile?.write(from: outputBuffer) }
+            if status == .endOfStream { reachedEnd = true }
+            else if status == .error { throw NSError(domain: "AudifuzzAudio", code: -2) }
+        }
+        outputFile = nil
+        let convertedFile = try AVAudioFile(forReading: url)
+        shouldKeepTemporaryFile = true
+        return convertedFile
+    }
+
     func load(url: URL) {
         print("[FileLoader] Starting file load request for: \(url.lastPathComponent)")
         if isMicLive { stopMic() }
         player.stop()
+        hasScheduledFile = false
         playbackID &+= 1
         isPlaying = false
         isLoading = true
@@ -213,10 +318,16 @@ final class AudioEngineManager: ObservableObject {
             }
 
             do {
-                let f = try AVAudioFile(forReading: url)
+                let sourceFile = try AVAudioFile(forReading: url)
+                let playbackFile: AVAudioFile
+                if let self = self, let converted = try? self.makePlaybackFile(from: sourceFile) {
+                    playbackFile = converted
+                } else {
+                    playbackFile = sourceFile
+                }
                 DispatchQueue.main.async {
                     print("[FileLoader] SUCCESS: File loaded successfully into memory.")
-                    self?.finishLoading(file: f, url: url, scoped: scoped)
+                    self?.finishLoading(file: playbackFile, url: url, scoped: scoped)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -232,6 +343,11 @@ final class AudioEngineManager: ObservableObject {
     private func finishLoading(file f: AVAudioFile, url: URL, scoped: Bool) {
         scopedURL?.stopAccessingSecurityScopedResource()
         scopedURL = scoped ? url : nil
+        if let oldTemporaryURL = temporaryPlaybackURL, oldTemporaryURL != f.url {
+            try? FileManager.default.removeItem(at: oldTemporaryURL)
+        }
+        temporaryPlaybackURL = f.url == url ? nil : f.url
+        loadedURL = url
         file = f
         fileName = url.lastPathComponent
         restartEngine()
@@ -257,8 +373,8 @@ final class AudioEngineManager: ObservableObject {
                 print("[Playback] FAILURE: Could not start engine. Playback aborted.")
                 return
             }
-            armFile()
         }
+        if !hasScheduledFile { armFile() }
         player.play()
         isPlaying = true
         print("[Playback] SUCCESS: Playback started for '\(fileName ?? "Unknown")'.")
@@ -266,9 +382,19 @@ final class AudioEngineManager: ObservableObject {
 
     func stop() {
         player.stop()
+        hasScheduledFile = false
         isPlaying = false
         armFile()
         print("[Playback] SUCCESS: Playback stopped and player armed for reset.")
+    }
+
+    func togglePlayback() {
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+        } else {
+            play()
+        }
     }
 
     private func armFile() {
@@ -281,13 +407,21 @@ final class AudioEngineManager: ObservableObject {
             DispatchQueue.main.async {
                 guard let self = self, self.playbackID == id else { return }
                 self.player.stop()
-                self.isPlaying = false
-                print("[Playback] Reached end of stream. Loop reset complete.")
-                self.armFile()
+                self.hasScheduledFile = false
+                if self.isLooping {
+                    self.armFile()
+                    self.player.play()
+                    self.isPlaying = true
+                    print("[Playback] Loop restarted.")
+                } else {
+                    self.isPlaying = false
+                    print("[Playback] Reached end of stream.")
+                }
             }
         }
+        hasScheduledFile = true
         
-        let safeBuffer = max(256, userBufferSize)
+        let safeBuffer = max(256, processingBufferSize)
         player.prepare(withFrameCount: safeBuffer)
     }
 
@@ -320,6 +454,7 @@ final class AudioEngineManager: ObservableObject {
         let outputID = preferredOutputDeviceID == 0
             ? defaultAudioDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice)
             : preferredOutputDeviceID
+        disableMicEngineOutput()
         setAudioUnitDevice(micEngine.inputNode.audioUnit, deviceID: inputID)
         setAudioUnitDevice(engine.outputNode.audioUnit, deviceID: outputID)
         let inputLabel = inputID == 0 ? "System Default" : String(inputID)
@@ -327,6 +462,33 @@ final class AudioEngineManager: ObservableObject {
         print("[AudioDevices] Input: \(inputLabel), Output: \(outputLabel)")
         #endif
     }
+
+#if os(macOS)
+    /// The capture engine only feeds the output engine's player node. Disabling
+    /// its otherwise-unused output unit avoids asking Core Audio to build a
+    /// duplex device pair when the selected input and output have different
+    /// hardware formats.
+    private func disableMicEngineOutput() {
+        guard let audioUnit = micEngine.outputNode.audioUnit else {
+            print("[AudioDevices] WARNING: Mic-engine output unit is unavailable.")
+            return
+        }
+        var disabled: UInt32 = 0
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_EnableIO,
+            kAudioUnitScope_Output,
+            0,
+            &disabled,
+            UInt32(MemoryLayout<UInt32>.size)
+        )
+        if status == noErr {
+            print("[AudioDevices] Disabled the unused mic-engine output unit.")
+        } else {
+            print("[AudioDevices] WARNING: Could not disable the unused mic-engine output. OSStatus: \(status)")
+        }
+    }
+#endif
 
     #if os(macOS)
     private func defaultAudioDeviceID(selector: AudioObjectPropertySelector) -> AudioDeviceID {
@@ -397,6 +559,7 @@ final class AudioEngineManager: ObservableObject {
         print("[AudioEngine] Restarting main engine graph...")
         if isRecording { finishRecording(load: false) }
         playbackID &+= 1
+        hasScheduledFile = false
         isPlaying = false
 
         micLock.lock()
@@ -407,10 +570,12 @@ final class AudioEngineManager: ObservableObject {
 
         micPlayer.stop()
         engine.stop()
+        engine.mainMixerNode.removeTap(onBus: 0)
         applyPreferredDevices()
         configureSession()
         refreshGraphFormat()
         rebuildChain()
+        installOscilloscopeTap()
         connectPlayer()
         connectMic()
         if file != nil || isMicLive {
@@ -452,7 +617,7 @@ final class AudioEngineManager: ObservableObject {
         
         engine.disconnectNodeOutput(sourceMixer)
         effects.forEach { engine.disconnectNodeOutput($0.unit) }
-        engine.disconnectNodeOutput(spatial.mixer)
+        spatial.sourceMixers.forEach { engine.disconnectNodeOutput($0) }
         engine.disconnectNodeOutput(spatial.environment)
 
         var previous: AVAudioNode = sourceMixer
@@ -461,8 +626,12 @@ final class AudioEngineManager: ObservableObject {
             previous = fx.unit
         }
         if spatial.isEnabled {
-            engine.connect(previous, to: spatial.mixer, format: gf)
-            engine.connect(spatial.mixer, to: spatial.environment, format: mono)
+            for sourceMixer in spatial.sourceMixers.prefix(spatial.locations.count) {
+                engine.connect(previous, to: sourceMixer, format: gf)
+                let inputBus = spatial.environment.nextAvailableInputBus
+                engine.connect(sourceMixer, to: spatial.environment,
+                               fromBus: 0, toBus: inputBus, format: mono)
+            }
             engine.connect(spatial.environment, to: engine.mainMixerNode, format: gf)
             print("[EffectsChain] Built active chain with Spatial Stage enabled.")
         } else {
@@ -471,6 +640,43 @@ final class AudioEngineManager: ObservableObject {
         }
         spatial.apply()
         print("[EffectsChain] SUCCESS: All effect nodes linked successfully.")
+    }
+
+    /// Observe the final output after effects and optional spatial processing.
+    private func installOscilloscopeTap() {
+        let mixer = engine.mainMixerNode
+        let format = mixer.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else { return }
+
+        mixer.installTap(onBus: 0, bufferSize: 256, format: format) { [weak self] buffer, _ in
+            guard let self = self, let channels = buffer.floatChannelData else { return }
+            let samples = channels[0]
+            let rightSamples = buffer.format.channelCount > 1 ? channels[1] : channels[0]
+            let step = max(1, Int(buffer.frameLength) / 256)
+            for index in Swift.stride(from: 0, to: Int(buffer.frameLength), by: step) {
+                self.scopeStorage[self.scopeWritePosition] = samples[index]
+                self.scopeRightStorage[self.scopeWritePosition] = rightSamples[index]
+                self.scopeWritePosition = (self.scopeWritePosition + 1) % self.scopeCapacity
+            }
+        }
+    }
+
+    func oscilloscopeSnapshot() -> [Float] {
+        oscilloscopeStereoSnapshot().left
+    }
+
+    func oscilloscopeStereoSnapshot() -> (left: [Float], right: [Float]) {
+        let count = oscilloscopeSamples.count
+        let end = scopeWritePosition
+        let start = (end - count + scopeCapacity) % scopeCapacity
+        var left = Array(repeating: Float.zero, count: count)
+        var right = Array(repeating: Float.zero, count: count)
+        for index in 0..<count {
+            let storageIndex = (start + index) % scopeCapacity
+            left[index] = scopeStorage[storageIndex]
+            right[index] = scopeRightStorage[storageIndex]
+        }
+        return (left, right)
     }
 
     // MARK: - Microphone
@@ -549,7 +755,11 @@ final class AudioEngineManager: ObservableObject {
         guard let format = micFormat else { return }
         let input = micEngine.inputNode
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: userBufferSize, format: format) { [weak self] buffer, _ in
+        // The input node is directly backed by capture hardware and cannot
+        // resample its tap bus. Let AVAudioEngine use that bus's native format;
+        // the downstream mixer handles conversion to the project rate.
+        print("[Microphone] Installing tap at hardware rate \(format.sampleRate) Hz (\(format.channelCount) channels).")
+        input.installTap(onBus: 0, bufferSize: processingBufferSize, format: nil) { [weak self] buffer, _ in
             self?.handleMic(buffer)
         }
     }
@@ -681,6 +891,23 @@ final class AudioEngineManager: ObservableObject {
             effects[fxIndex].parameters[paramIndex].value = value
             print("[EffectsManager] SUCCESS: Updated '\(effects[fxIndex].key)' parameter '\(parameterID)' -> \(value)")
         }
+    }
+
+    func receiveMIDIControlChange(parameterIndex: Int, value: UInt8) {
+        let mapped = effects.flatMap { effect in
+            effect.parameters.indices.map { (effect: effect, parameterIndex: $0) }
+        }
+        guard mapped.indices.contains(parameterIndex) else { return }
+        let destination = mapped[parameterIndex]
+        let parameter = destination.effect.parameters[destination.parameterIndex]
+        let amount = Float(value) / 127
+        destination.effect.parameters[destination.parameterIndex].value =
+            parameter.range.lowerBound + (parameter.range.upperBound - parameter.range.lowerBound) * amount
+    }
+
+    func receiveMIDIEffectButton(index: Int, enabled: Bool) {
+        guard effects.indices.contains(index) else { return }
+        effects[index].isEnabled = enabled
     }
 
     func move(_ effect: EffectModule, by offset: Int) {

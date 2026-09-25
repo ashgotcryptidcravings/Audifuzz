@@ -4,12 +4,13 @@ import SwiftUI
 /// then save it or send it to the Editor tab as a sample.
 struct SoundLabView: View {
     @ObservedObject var lab: SoundLabEngine
+    @Binding var selectedVoiceIndex: Int
     var onUseSample: (URL) -> Void
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                Text("Sound Lab").font(.largeTitle.bold())
+                Text("SynthSpace").font(.largeTitle.bold())
                 controls
 
                 ForEach(Array(lab.voices.enumerated()), id: \.element.id) { index, voice in
@@ -17,7 +18,10 @@ struct SoundLabView: View {
                         voice: lab.binding(for: voice.id),
                         index: index,
                         canRemove: lab.voices.count > 1,
-                        onRemove: { lab.removeVoice(voice.id) })
+                        onRemove: {
+                            lab.removeVoice(voice.id)
+                            selectedVoiceIndex = min(selectedVoiceIndex, max(0, lab.voices.count - 1))
+                        })
                 }
 
                 Button("Add instrument") { lab.addVoice() }
@@ -29,7 +33,7 @@ struct SoundLabView: View {
             .padding()
         }
         .onAppear { lab.refreshSamples() }
-        .onDisappear { lab.stopPreview() }
+        .onDisappear { lab.stopManualPreview() }
     }
 
     private var controls: some View {
@@ -38,6 +42,12 @@ struct SoundLabView: View {
                 Button(lab.isPlaying ? "Stop" : "Play") { lab.togglePlay() }
                 Button("Save Sample") { lab.saveSample() }
                     .disabled(lab.isSaving)
+                Picker("Touch Bar instrument", selection: $selectedVoiceIndex) {
+                    ForEach(Array(lab.voices.enumerated()), id: \.element.id) { index, _ in
+                        Text("Instrument \(index + 1)").tag(index)
+                    }
+                }
+                .pickerStyle(.menu)
                 Dial(title: "Length", value: $lab.duration, range: 1...10, unit: " s", size: 44)
             }
             .buttonStyle(.bordered)
@@ -188,6 +198,7 @@ struct EqualizerCardView: View {
             EQResponseGraph(
                 gains: $lab.eqGains,
                 waveform: lab.waveform,
+                isPlaying: lab.isPlaying,
                 onEditingEnded: logSettledEQ
             )
         }
@@ -242,11 +253,15 @@ private struct EQGraphPlot: View {
                     }
                 }
 
-                ForEach(frequencyLabels, id: \.0) { frequency, label in
-                    Text(label)
+                ForEach(Array(frequencyLabels.enumerated()), id: \.offset) { index, item in
+                    let x = xPosition(for: item.0, width: width)
+                    let labelCenter = min(max(x, 18), max(18, width - 18))
+                    let alignment: Alignment = index == 0 ? .leading : (index == frequencyLabels.count - 1 ? .trailing : .center)
+                    Text(item.1)
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                        .position(x: xPosition(for: frequency, width: width), y: height + 12)
+                        .frame(width: 36, alignment: alignment)
+                        .position(x: labelCenter, y: height + 12)
                 }
 
                 Text("+18").font(.caption2).foregroundColor(.secondary).position(x: 18, y: 8)
@@ -345,6 +360,7 @@ private struct EQGraphPlot: View {
 struct EQResponseGraph: View {
     @Binding var gains: [Float]
     let waveform: [Float]
+    var isPlaying = false
     var onEditingEnded: (() -> Void)? = nil
 
     @State private var activeBand: Int?
@@ -355,15 +371,17 @@ struct EQResponseGraph: View {
     private let maximumGain: CGFloat = 18
 
     var body: some View {
-        EQGraphPlot(
-            gains: $gains,
-            waveform: waveform,
-            frequencies: frequencies,
-            frequencyLabels: frequencyLabels,
-            gainLines: gainLines,
-            maximumGain: maximumGain,
-            onEditingEnded: onEditingEnded
-        )
+        TimelineView(.animation(minimumInterval: 1.0 / 120.0, paused: !isPlaying)) { _ in
+            EQGraphPlot(
+                gains: $gains,
+                waveform: waveform,
+                frequencies: frequencies,
+                frequencyLabels: frequencyLabels,
+                gainLines: gainLines,
+                maximumGain: maximumGain,
+                onEditingEnded: onEditingEnded
+            )
+        }
         .frame(height: 172)
         .drawingGroup()
     }
